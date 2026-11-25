@@ -1,10 +1,11 @@
 export type Env = {
-  /** Which LLM writes Kak Pinta's lines: "pollinations" (default, GPT-5 Nano) or "claude". */
-  TUTOR_PROVIDER?: "pollinations" | "claude";
+  /** Which LLM service writes Kak Pinta's lines: "pollinations" (default), "sumopod" or "claude". */
+  TUTOR_PROVIDER?: "pollinations" | "sumopod" | "claude";
   POLLINATIONS_API_KEY?: string;
-  /** Pollinations model id; defaults to openai/gpt-5-nano. */
+  SUMOPOD_API_KEY?: string;
+  /** Model id at the chosen provider; defaults to GPT-5 Nano (openai/gpt-5-nano on Pollinations, gpt-5-nano on Sumopod). */
   TUTOR_MODEL?: string;
-  /** Optional reasoning_effort sent to Pollinations, e.g. "low". */
+  /** Optional reasoning_effort for Pollinations or Sumopod, e.g. "low". */
   TUTOR_REASONING_EFFORT?: string;
   ANTHROPIC_API_KEY?: string;
   GOOGLE_CLOUD_API_KEY: string;

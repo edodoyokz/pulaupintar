@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
-import { claudeModel, pollinationsModel, runTutorTurn } from "../src/tutor";
+import { claudeModel, openAiCompatibleModel, runTutorTurn } from "../src/tutor";
 import type { TutorTurnRequest } from "../src/types";
 
 const turn: TutorTurnRequest = {
@@ -84,7 +84,7 @@ describe("runTutorTurn", () => {
   });
 });
 
-describe("pollinationsModel", () => {
+describe("openAiCompatibleModel", () => {
   const reply = (body: unknown, status = 200) =>
     (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
@@ -101,7 +101,7 @@ describe("pollinationsModel", () => {
       );
     }) as unknown as typeof fetch;
 
-    const result = await runTutorTurn(pollinationsModel({ apiKey: "sk_test", reasoningEffort: "low", fetch: fetchSpy }), turn);
+    const result = await runTutorTurn(openAiCompatibleModel({ provider: "pollinations", apiKey: "sk_test", reasoningEffort: "low", fetch: fetchSpy }), turn);
     expect(result).toEqual({ segments: [{ lang: "id", text: "Betul!" }], fallbackUsed: false });
     expect(sent!.url).toBe("https://gen.pollinations.ai/v1/chat/completions");
     expect((sent!.init.headers as Record<string, string>).authorization).toBe("Bearer sk_test");
@@ -111,11 +111,25 @@ describe("pollinationsModel", () => {
     expect(body.response_format.json_schema.strict).toBe(true);
   });
 
+  it("sends Sumopod requests to its own endpoint and model", async () => {
+    let sent: { url: string; body: { model: string } } | undefined;
+    const fetchSpy = (async (url: string, init: RequestInit) => {
+      sent = { url, body: JSON.parse(String(init.body)) };
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify({ segments: [{ lang: "id", text: "Hebat!" }] }) }, finish_reason: "stop" }] }),
+      );
+    }) as unknown as typeof fetch;
+    const result = await runTutorTurn(openAiCompatibleModel({ provider: "sumopod", apiKey: "sk-x", fetch: fetchSpy }), turn);
+    expect(result.fallbackUsed).toBe(false);
+    expect(sent!.url).toBe("https://ai.sumopod.com/v1/chat/completions");
+    expect(sent!.body.model).toBe("gpt-5-nano");
+  });
+
   it("uses the prepared line when the reply is cut off or the call fails", async () => {
     const cutOff = reply({ choices: [{ message: { content: "{\"segm" }, finish_reason: "length" }] });
-    expect((await runTutorTurn(pollinationsModel({ apiKey: "k", fetch: cutOff }), turn)).fallbackUsed).toBe(true);
+    expect((await runTutorTurn(openAiCompatibleModel({ provider: "pollinations", apiKey: "k", fetch: cutOff }), turn)).fallbackUsed).toBe(true);
     const failed = reply({ error: "budget" }, 402);
-    expect((await runTutorTurn(pollinationsModel({ apiKey: "k", fetch: failed }), turn)).fallbackUsed).toBe(true);
+    expect((await runTutorTurn(openAiCompatibleModel({ provider: "sumopod", apiKey: "k", fetch: failed }), turn)).fallbackUsed).toBe(true);
   });
 });
 

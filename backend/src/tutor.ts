@@ -3,8 +3,14 @@ import { FALLBACK_LINES, filterSegments } from "./safety";
 import type { SpeechSegment, TutorTurnRequest, TutorTurnResponse } from "./types";
 
 const CLAUDE_MODEL = "claude-opus-5-5";
-export const DEFAULT_POLLINATIONS_MODEL = "openai/gpt-5-nano";
-const POLLINATIONS_URL = "https://gen.pollinations.ai/v1/chat/completions";
+/** OpenAI-compatible providers the tutor can use, with their chat endpoint and default model. */
+export const OPENAI_COMPATIBLE_PROVIDERS = {
+  pollinations: { url: "https://gen.pollinations.ai/v1/chat/completions", defaultModel: "openai/gpt-5-nano" },
+  // Model ids come from the Sumopod AI dashboard; TUTOR_MODEL overrides this guess.
+  sumopod: { url: "https://ai.sumopod.com/v1/chat/completions", defaultModel: "gpt-5-nano" },
+} as const;
+
+export type OpenAiCompatibleProvider = keyof typeof OPENAI_COMPATIBLE_PROVIDERS;
 
 /** What the tutor needs from any LLM: JSON text, and whether the model finished normally. */
 export type TutorModel = (system: string, user: string) => Promise<{ text: string; complete: boolean }>;
@@ -123,16 +129,23 @@ type ChatCompletion = {
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 };
 
-/** Pollinations' OpenAI-compatible Chat Completions API, e.g. GPT-5 Nano. */
-export const pollinationsModel =
-  (options: { apiKey: string; model?: string; reasoningEffort?: string; fetch?: typeof fetch }): TutorModel =>
+/** Any OpenAI-compatible Chat Completions API (Pollinations, Sumopod), e.g. GPT-5 Nano. */
+export const openAiCompatibleModel =
+  (options: {
+    provider: OpenAiCompatibleProvider;
+    apiKey: string;
+    model?: string;
+    reasoningEffort?: string;
+    fetch?: typeof fetch;
+  }): TutorModel =>
   async (system, user) => {
+    const provider = OPENAI_COMPATIBLE_PROVIDERS[options.provider];
     const doFetch = options.fetch ?? fetch;
-    const response = await doFetch(POLLINATIONS_URL, {
+    const response = await doFetch(provider.url, {
       method: "POST",
       headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
-        model: options.model || DEFAULT_POLLINATIONS_MODEL,
+        model: options.model || provider.defaultModel,
         max_completion_tokens: 1500,
         ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
         response_format: {
@@ -145,13 +158,13 @@ export const pollinationsModel =
         ],
       }),
     });
-    if (!response.ok) throw new Error(`pollinations ${response.status}`);
+    if (!response.ok) throw new Error(`${options.provider} ${response.status}`);
     const completion = (await response.json()) as ChatCompletion;
     console.log(
       JSON.stringify({
         event: "cost",
         kind: "llm",
-        provider: "pollinations",
+        provider: options.provider,
         model: completion.model,
         inputTokens: completion.usage?.prompt_tokens,
         outputTokens: completion.usage?.completion_tokens,

@@ -9,7 +9,7 @@ Spesifikasi produk dan kurikulum: lihat dokumen "Pulaupintar — Spesifikasi Tut
 | Folder | Isi |
 | --- | --- |
 | `app/` | Aplikasi HP (Expo SDK 58, Expo Router, TypeScript) |
-| `backend/` | Cloudflare Worker (Hono) yang menyimpan API key dan memanggil LLM (default GPT-5 Nano lewat Pollinations, atau Claude), text-to-speech, dan speech-to-text |
+| `backend/` | Cloudflare Worker (Hono) yang menyimpan API key dan memanggil LLM (default GPT-5 Nano lewat Pollinations; bisa juga Sumopod atau Claude), text-to-speech, dan speech-to-text |
 
 Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menekan mikrofon dan menjawab (rekam → STT), lalu aplikasi menilai jawaban dari kunci jawaban (bukan LLM) dan meminta tutor memuji, memberi petunjuk, atau menunjukkan jawaban.
 

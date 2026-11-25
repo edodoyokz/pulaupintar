@@ -1,8 +1,10 @@
-# Which LLM writes Kak Pinta's lines: pollinations (default) or claude
+# Which LLM service writes Kak Pinta's lines: pollinations (default), sumopod or claude
 TUTOR_PROVIDER=pollinations
 # Secret key (sk_...) from enter.pollinations.ai
 POLLINATIONS_API_KEY=
-# Optional: Pollinations model id (default openai/gpt-5-nano) and reasoning effort
+# API key (sk-...) from ai.sumopod.com, used when TUTOR_PROVIDER=sumopod
+SUMOPOD_API_KEY=
+# Optional: model id at that provider (default GPT-5 Nano) and reasoning effort
 TUTOR_MODEL=
 TUTOR_REASONING_EFFORT=low
 # Only needed when TUTOR_PROVIDER=claude

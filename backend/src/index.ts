@@ -2,19 +2,21 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
-import { claudeModel, pollinationsModel, runTutorTurn, type TutorModel } from "./tutor";
+import { claudeModel, openAiCompatibleModel, runTutorTurn, type TutorModel } from "./tutor";
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
 
-const tutorModelFor = (env: Env): TutorModel =>
-  env.TUTOR_PROVIDER === "claude"
-    ? claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }))
-    : pollinationsModel({
-        apiKey: env.POLLINATIONS_API_KEY ?? "",
-        model: env.TUTOR_MODEL,
-        reasoningEffort: env.TUTOR_REASONING_EFFORT,
-      });
+const tutorModelFor = (env: Env): TutorModel => {
+  if (env.TUTOR_PROVIDER === "claude") return claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }));
+  const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
+  return openAiCompatibleModel({
+    provider,
+    apiKey: (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "",
+    model: env.TUTOR_MODEL,
+    reasoningEffort: env.TUTOR_REASONING_EFFORT,
+  });
+};
 
 const app = new Hono<{ Bindings: Env }>();
 
