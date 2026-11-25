@@ -143,7 +143,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
       setHeard(childSaid);
       const attempt = attemptRef.current;
 
-      if (isCorrectAnswer(childSaid, item.answers, lessonAnswers)) {
+      if (isCorrectAnswer(childSaid, item.answers, lessonAnswers, lesson.answerLang)) {
         const score = correctCount + 1;
         setCorrectCount(score);
         await say({ kind: "praise", item, childSaid, attempt });
