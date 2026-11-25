@@ -11,7 +11,7 @@ const END_GRACE_MS = 3_000;
 
 /**
  * Kak Pinta's voice: Gemini Live speaks each line and its audio plays while it is still arriving.
- * The session only reads lines aloud (the token is locked to that), and a stopped line closes the socket
+ * The session only reads lines aloud (the Worker relay only passes approved lines), and a stopped line closes the socket
  * so nothing queued behind it can still be heard.
  */
 export class LiveSpeaker {
@@ -57,7 +57,6 @@ export class LiveSpeaker {
     const context = (this.context ??= new AudioContext({ sampleRate: OUTPUT_RATE }));
     await context.resume();
     if (epoch !== this.epoch) return this.closeIfIdle();
-    const text = segments.map((segment) => segment.text).join(" ");
 
     await new Promise<void>((resolve, reject) => {
       const source: AudioBufferQueueSourceNode = context.createBufferQueueSource();
@@ -137,7 +136,8 @@ export class LiveSpeaker {
           }
         }
       };
-      connection.send({ realtimeInput: { text } });
+      // The Worker checks the lines (same rules as /v1/tts) before Gemini sees them.
+      connection.send({ segments });
     });
   }
 

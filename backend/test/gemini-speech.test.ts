@@ -106,21 +106,3 @@ describe("transcribeWithGemini", () => {
     await expect(transcribeWithGemini(env, request, fakeFetch)).rejects.toThrow("500");
   });
 });
-
-describe("createLiveToken", () => {
-  it("locks the token to the role's setup and keeps the key out of the result", async () => {
-    const { createLiveToken } = await import("../src/live-token");
-    let sent: any;
-    const fakeFetch = (async (_url: string, init: RequestInit) => {
-      sent = JSON.parse(String(init.body));
-      return Response.json({ name: "auth_tokens/abc" });
-    }) as unknown as typeof fetch;
-    const speak = await createLiveToken(env, "speak", fakeFetch);
-    expect(sent.uses).toBe(1);
-    expect(sent.bidiGenerateContentSetup.model).toBe("models/gemini-3.8-live");
-    expect(speak.url).toContain("access_token=auth_tokens%2Fabc");
-    expect(JSON.stringify(speak)).not.toContain("key");
-    const listen = await createLiveToken(env, "listen", fakeFetch);
-    expect(listen.setup).toMatchObject({ model: "models/gemini-3.5-transcribe-live", inputAudioTranscription: {} });
-  });
-});

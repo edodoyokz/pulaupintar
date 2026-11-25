@@ -23,7 +23,7 @@ npm run dev                      # http://localhost:8787
 npm test
 ```
 
-- Suara memakai Gemini: `GEMINI_API_KEY` menulis kalimat, memeriksa keamanan, dan membuat token sekali pakai (`/v1/live/token`) supaya aplikasi men-stream suara langsung ke Gemini Live 3.8 (bicara) dan Gemini 3.5 Transcribe Live (mendengar). Kunci tidak pernah ada di aplikasi.
+- Suara memakai Gemini: `GEMINI_API_KEY` menulis kalimat, memeriksa keamanan, dan meneruskan suara lewat Worker (`/v1/live/speak` dan `/v1/live/listen`, websocket) ke Gemini Live 3.8 (bicara) dan Gemini 3.5 Transcribe Live (mendengar). Aplikasi tidak memegang kunci atau token Gemini, dan setiap kalimat yang diucapkan melewati pemeriksaan yang sama dengan `/v1/tts`.
 - Aplikasi memakai modul audio native (`react-native-audio-api`), jadi butuh development build, bukan Expo Go. Expo sendiri tidak menyediakan pemutaran PCM mentah yang di-stream, makanya library ini dipakai untuk suara dan mikrofon. Tanpa itu (atau dengan `EXPO_PUBLIC_VOICE=rest`) aplikasi memakai `/v1/tts` dan `/v1/stt` yang juga Gemini.
 - Untuk kembali ke Google Cloud TTS/STT: set `SPEECH_PROVIDER=google`, isi `GOOGLE_CLOUD_API_KEY` (Cloud Text-to-Speech dan Speech-to-Text API aktif), dan `EXPO_PUBLIC_VOICE=rest` serta `EXPO_PUBLIC_SPEECH=google` di aplikasi (Android lalu merekam AMR-WB, bukan AAC).
 - **Penting:** Ketentuan Gemini API melarang aplikasi yang ditujukan atau kemungkinan dipakai anak di bawah 18 tahun, dan di tier gratis data dipakai Google untuk meningkatkan produknya (peninjau manusia bisa membacanya). Pakai kunci dari proyek berbayar, dan periksa ketentuan sebelum dipakai anak lain.

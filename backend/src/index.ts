@@ -1,8 +1,8 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
-import { createLiveToken, type LiveRole } from "./live-token";
-import { synthesizeWithGemini, transcribeWithGemini } from "./gemini-speech";
+import { runLiveRelay, type RelaySocket } from "./live-relay";
+import { connectLive, synthesizeWithGemini, transcribeWithGemini } from "./gemini-speech";
 import {
   openAiCompatibleModel,
   isSafetyReply,
@@ -118,13 +118,19 @@ app.post("/v1/stt", async (c) => {
   return c.json({ transcript });
 });
 
-// Live voice: the phone talks to Gemini directly with a one-time token, so audio streams without a hop through the Worker.
-app.post("/v1/live/token", async (c) => {
-  const { role } = await c.req.json<{ role?: LiveRole }>();
-  if (role !== "speak" && role !== "listen") return c.json({ error: "role must be speak or listen" }, 400);
+// Live voice: the phone streams to the Worker, which relays to Gemini Live with the key and a fixed setup,
+// so the phone holds no Gemini token and every spoken line passes the same checks as /v1/tts.
+const liveRoute = (role: "speak" | "listen") => async (c: Context<{ Bindings: Env }>) => {
+  if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.json({ error: "websocket required" }, 426);
   if (!c.env.GEMINI_API_KEY) return c.json({ error: "live voice not configured" }, 503);
-  return c.json(await createLiveToken(c.env, role));
-});
+  const upstream = await connectLive(c.env);
+  const { 0: client, 1: server } = new WebSocketPair();
+  server.accept();
+  runLiveRelay(c.env, role, server as unknown as RelaySocket, upstream);
+  return new Response(null, { status: 101, webSocket: client });
+};
+app.get("/v1/live/speak", liveRoute("speak"));
+app.get("/v1/live/listen", liveRoute("listen"));
 
 app.onError((error, c) => {
   console.error(JSON.stringify({ event: "error", path: c.req.path, message: error.message }));
