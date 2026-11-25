@@ -2,7 +2,7 @@ import { SPEAKER_INSTRUCTION } from "./live-setup";
 import type { Env, SpeechSegment, SttRequest } from "./types";
 
 const HOST = "https://generativelanguage.googleapis.com";
-const LIVE_URL = `${HOST}/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
+const LIVE_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 const LIVE_SAMPLE_RATE = 24_000;
 const LIVE_TIMEOUT_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -17,16 +17,28 @@ export type LiveSocket = {
 };
 export type LiveConnect = (env: Env) => Promise<LiveSocket>;
 
-/** Opens the Live websocket from the Worker; the key goes in a header, never in the app. */
+/**
+ * Opens the Live websocket from the Worker; the key stays in the Worker, never in the app.
+ * Opened with the WebSocket constructor, not a fetch upgrade: Gemini drops a fetch-upgraded socket about 10 s after
+ * it opens (a long line was cut mid-sentence), while this one stays up. The constructor can't send headers, so the key
+ * goes in the URL, which only the Worker and Google see.
+ */
 export const connectLive: LiveConnect = async (env) => {
-  const response = await fetch(LIVE_URL, {
-    headers: { upgrade: "websocket", "x-goog-api-key": env.GEMINI_API_KEY ?? "" },
-    signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
-  });
-  const socket = (response as unknown as { webSocket?: LiveSocket & { accept: () => void } }).webSocket;
-  if (!socket) throw new Error(`Gemini Live refused the connection: ${response.status}`);
-  socket.accept();
-  return socket;
+  const socket = new WebSocket(`${LIVE_URL}?key=${encodeURIComponent(env.GEMINI_API_KEY ?? "")}`);
+  let timer = 0;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("Gemini Live connect timed out")), CONNECT_TIMEOUT_MS);
+      socket.addEventListener("open", () => resolve(), { once: true });
+      socket.addEventListener("error", () => reject(new Error("Gemini Live refused the connection")), { once: true });
+    });
+  } catch (error) {
+    socket.close();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+  return socket as unknown as LiveSocket;
 };
 
 /** Gemini sends JSON in text or binary frames, depending on the runtime. */
