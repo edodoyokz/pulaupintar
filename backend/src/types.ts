@@ -13,6 +13,11 @@ export type Env = {
    */
   SAFETY_MODEL?: string;
   SAFETY_PROVIDER?: "pollinations" | "sumopod";
+  /** Backup provider and model, used when the main one errors, times out or is cut off. */
+  TUTOR_FALLBACK_PROVIDER?: "pollinations" | "sumopod";
+  TUTOR_FALLBACK_MODEL?: string;
+  SAFETY_FALLBACK_PROVIDER?: "pollinations" | "sumopod";
+  SAFETY_FALLBACK_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
   GOOGLE_CLOUD_API_KEY: string;
   APP_TOKEN: string;

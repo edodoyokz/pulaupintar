@@ -8,6 +8,7 @@ import {
   runTutorTurn,
   SAFETY_OUTPUT_SCHEMA,
   safetyGuard,
+  withFallback,
   type OpenAiCompatibleProvider,
   type SafetyGuard,
   type TutorModel,
@@ -19,27 +20,40 @@ const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a ch
 const apiKeyFor = (env: Env, provider: OpenAiCompatibleProvider) =>
   (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
 
+const backupModel = (
+  env: Env,
+  provider: OpenAiCompatibleProvider | undefined,
+  model: string | undefined,
+  schema?: { name: string; schema: object },
+): TutorModel | undefined =>
+  provider ? openAiCompatibleModel({ provider, apiKey: apiKeyFor(env, provider), model, schema }) : undefined;
+
 const tutorModelFor = (env: Env): TutorModel => {
-  if (env.TUTOR_PROVIDER === "claude") return claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }));
+  const backup = backupModel(env, env.TUTOR_FALLBACK_PROVIDER, env.TUTOR_FALLBACK_MODEL);
+  if (env.TUTOR_PROVIDER === "claude") {
+    return withFallback(claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })), backup);
+  }
   const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
-  return openAiCompatibleModel({
+  const primary = openAiCompatibleModel({
     provider,
     apiKey: apiKeyFor(env, provider),
     model: env.TUTOR_MODEL,
     reasoningEffort: env.TUTOR_REASONING_EFFORT,
   });
+  return withFallback(primary, backup);
 };
 
 const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
   if (!env.SAFETY_MODEL) return undefined;
   const provider = env.SAFETY_PROVIDER ?? (env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations");
+  const primary = openAiCompatibleModel({
+    provider,
+    apiKey: apiKeyFor(env, provider),
+    model: env.SAFETY_MODEL,
+    schema: SAFETY_OUTPUT_SCHEMA,
+  });
   return safetyGuard(
-    openAiCompatibleModel({
-      provider,
-      apiKey: apiKeyFor(env, provider),
-      model: env.SAFETY_MODEL,
-      schema: SAFETY_OUTPUT_SCHEMA,
-    }),
+    withFallback(primary, backupModel(env, env.SAFETY_FALLBACK_PROVIDER, env.SAFETY_FALLBACK_MODEL, SAFETY_OUTPUT_SCHEMA)),
   );
 };
 

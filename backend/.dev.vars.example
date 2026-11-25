@@ -11,6 +11,11 @@ TUTOR_REASONING_EFFORT=low
 # Leave empty to turn the check off. Provider defaults to the tutor's provider.
 SAFETY_MODEL=jev-1.14.0
 SAFETY_PROVIDER=sumopod
+# Optional backups when the main provider fails or is slow (sumopod or pollinations)
+TUTOR_FALLBACK_PROVIDER=pollinations
+TUTOR_FALLBACK_MODEL=openai/gpt-5-nano
+SAFETY_FALLBACK_PROVIDER=pollinations
+SAFETY_FALLBACK_MODEL=openai/gpt-5-nano
 # Only needed when TUTOR_PROVIDER=claude
 ANTHROPIC_API_KEY=
 GOOGLE_CLOUD_API_KEY=

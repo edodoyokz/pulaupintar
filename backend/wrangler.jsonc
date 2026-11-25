@@ -4,11 +4,16 @@
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // Non-secret model settings. API keys go in secrets: npx wrangler secret put SUMOPOD_API_KEY
+  // Non-secret model settings. API keys go in secrets: npx wrangler secret put SUMOPOD_API_KEY (and POLLINATIONS_API_KEY)
   "vars": {
     "TUTOR_PROVIDER": "sumopod",
     "TUTOR_MODEL": "hy4-flash",
     "SAFETY_PROVIDER": "sumopod",
-    "SAFETY_MODEL": "jev-1.14.0"
+    "SAFETY_MODEL": "jev-1.14.0",
+    // Backups when Sumopod errors, is slow (over 5 s) or returns a cut-off reply.
+    "TUTOR_FALLBACK_PROVIDER": "pollinations",
+    "TUTOR_FALLBACK_MODEL": "openai/gpt-5-nano",
+    "SAFETY_FALLBACK_PROVIDER": "pollinations",
+    "SAFETY_FALLBACK_MODEL": "openai/gpt-5-nano"
   }
 }

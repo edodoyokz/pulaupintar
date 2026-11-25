@@ -137,6 +137,7 @@ export const openAiCompatibleModel =
     model?: string;
     reasoningEffort?: string;
     fetch?: typeof fetch;
+    timeoutMs?: number;
     /** Output format; defaults to the tutor's speech segments. */
     schema?: { name: string; schema: object };
   }): TutorModel =>
@@ -145,6 +146,8 @@ export const openAiCompatibleModel =
     const doFetch = options.fetch ?? fetch;
     const response = await doFetch(provider.url, {
       method: "POST",
+      // A slow provider should give way to the fallback before the app's 15 s limit.
+      signal: AbortSignal.timeout(options.timeoutMs ?? 5_000),
       headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: options.model || provider.defaultModel,
@@ -214,6 +217,21 @@ export const safetyGuard =
       console.error(JSON.stringify({ event: "safety_error", message: String(error) }));
       return false;
     }
+  };
+
+/** Tries the primary model; on an error or a cut-off reply, asks the backup instead. */
+export const withFallback =
+  (primary: TutorModel, backup?: TutorModel): TutorModel =>
+  async (system, user) => {
+    if (!backup) return primary(system, user);
+    try {
+      const result = await primary(system, user);
+      if (result.complete) return result;
+      console.log(JSON.stringify({ event: "fallback_model", reason: "incomplete" }));
+    } catch (error) {
+      console.log(JSON.stringify({ event: "fallback_model", reason: String(error) }));
+    }
+    return backup(system, user);
   };
 
 export const runTutorTurn = async (

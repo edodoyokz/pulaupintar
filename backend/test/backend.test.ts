@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
-import { claudeModel, openAiCompatibleModel, runTutorTurn, safetyGuard, type TutorModel } from "../src/tutor";
+import { claudeModel, openAiCompatibleModel, runTutorTurn, safetyGuard, withFallback, type TutorModel } from "../src/tutor";
 import type { TutorTurnRequest } from "../src/types";
 
 const turn: TutorTurnRequest = {
@@ -156,6 +156,31 @@ describe("safety guard", () => {
   ])("uses the prepared line when the guard %s", async (_, reply) => {
     const result = await runTutorTurn(tutor, turn, safetyGuard(guardReplying(reply)));
     expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
+  });
+});
+
+describe("withFallback", () => {
+  const good: TutorModel = async () => ({
+    text: JSON.stringify({ segments: [{ lang: "id", text: "Dari cadangan!" }] }),
+    complete: true,
+  });
+
+  it.each([
+    ["errors", (async () => { throw new Error("sumopod 503"); }) as TutorModel],
+    ["is cut off", (async () => ({ text: "{", complete: false })) as TutorModel],
+  ])("uses the backup provider when the main one %s", async (_, primary) => {
+    const result = await runTutorTurn(withFallback(primary, good), turn);
+    expect(result).toEqual({ segments: [{ lang: "id", text: "Dari cadangan!" }], fallbackUsed: false });
+  });
+
+  it("does not call the backup when the main one works", async () => {
+    let backupCalls = 0;
+    const backup: TutorModel = async () => {
+      backupCalls += 1;
+      return good("", "");
+    };
+    await runTutorTurn(withFallback(good, backup), turn);
+    expect(backupCalls).toBe(0);
   });
 });
 
