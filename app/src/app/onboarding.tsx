@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useProfile } from "@/profile/profile-context";
@@ -17,17 +17,27 @@ const Onboarding = () => {
   const [name, setName] = useState("");
   const [age, setAge] = useState<number | null>(5);
   const [micDenied, setMicDenied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // Set before the first await: a second tap can arrive before `busy` renders.
+  const inFlight = useRef(false);
   const canContinue = name.trim().length > 0 && age !== null;
 
   const handleContinue = async () => {
-    if (!canContinue) return;
-    const granted = await prepareAudio();
-    if (!granted) {
-      setMicDenied(true);
-      return;
+    if (!canContinue || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      const granted = await prepareAudio().catch(() => false);
+      if (!granted) {
+        setMicDenied(true);
+        return;
+      }
+      await addChild(name.trim(), age);
+      router.replace("/island");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    await addChild(name.trim(), age);
-    router.replace("/island");
   };
 
   return (
@@ -84,7 +94,7 @@ const Onboarding = () => {
           )}
 
           <View style={styles.footer}>
-            <BigButton label="Mulai belajar" onPress={handleContinue} disabled={!canContinue} />
+            <BigButton label="Mulai belajar" onPress={handleContinue} disabled={!canContinue || busy} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

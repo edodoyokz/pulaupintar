@@ -106,7 +106,8 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
       child: { name: child.name, age: child.age },
       subject: lesson.subject,
       lesson: { title: lesson.title, goal: lesson.goal },
-      step: { ...step, item: step.item ? toApiItem(step.item) : undefined },
+      // The Worker accepts at most 200 characters of what the child said; a long ramble is cut, not rejected.
+      step: { ...step, childSaid: step.childSaid?.slice(0, 200), item: step.item ? toApiItem(step.item) : undefined },
     }).catch(() => ({ segments: fallbackForStep(step) }));
     lastSpeech.current = segments;
     await playLine(segments);

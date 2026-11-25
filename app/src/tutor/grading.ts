@@ -15,10 +15,13 @@ const NUMBER_WORDS: Record<Lang, Record<string, string>> = {
   },
 };
 
-// Longest phrases first, so "dua belas" becomes 12 before "dua" becomes 2.
-const NUMBER_PHRASES: Record<Lang, string[]> = {
-  id: Object.keys(NUMBER_WORDS.id).sort((a, b) => b.length - a.length),
-  en: Object.keys(NUMBER_WORDS.en).sort((a, b) => b.length - a.length),
+// Own properties only: a spoken "constructor" or "toString" must not resolve to something on Object.prototype.
+const own = <T>(record: Record<string, T>, key: string): T | undefined => (Object.hasOwn(record, key) ? record[key] : undefined);
+
+// The longest number phrase is tried first, so "dua belas" becomes 12 before "dua" becomes 2.
+const MAX_PHRASE_WORDS: Record<Lang, number> = {
+  id: Math.max(...Object.keys(NUMBER_WORDS.id).map((phrase) => phrase.split(" ").length)),
+  en: Math.max(...Object.keys(NUMBER_WORDS.en).map((phrase) => phrase.split(" ").length)),
 };
 
 // Indonesian speech-to-text often drops a final "h" ("tujuh" comes back as "tuju"); read those as the number word.
@@ -41,12 +44,28 @@ export const speechVocabulary = (answers: string[], lang: Lang): string[] => {
 const FILLER_WORDS = new Set(["eh", "em", "emm", "hmm", "ehm", "itu", "ya", "kak", "jawabannya", "adalah", "the", "it's", "is"]);
 
 const toWords = (text: string, lang: Lang): string[] => {
-  const words = text.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").trim().split(/\s+/);
-  let normalized = ` ${words.map((word) => SPOKEN_SPELLINGS[lang][word] ?? word).join(" ")} `;
-  for (const phrase of NUMBER_PHRASES[lang]) {
-    normalized = normalized.replaceAll(` ${phrase} `, ` ${NUMBER_WORDS[lang][phrase]} `);
+  const words = text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}' ]+/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => own(SPOKEN_SPELLINGS[lang], word) ?? word);
+  const result: string[] = [];
+  let index = 0;
+  while (index < words.length) {
+    let used = 1;
+    let digits: string | undefined;
+    for (let length = Math.min(MAX_PHRASE_WORDS[lang], words.length - index); length >= 1; length--) {
+      digits = own(NUMBER_WORDS[lang], words.slice(index, index + length).join(" "));
+      if (digits !== undefined) {
+        used = length;
+        break;
+      }
+    }
+    result.push(digits ?? words[index]);
+    index += used;
   }
-  return normalized.trim().split(" ").filter(Boolean);
+  return result;
 };
 
 export const normalizeAnswer = (text: string, lang: Lang = "id", keepWords?: Set<string>): string => {

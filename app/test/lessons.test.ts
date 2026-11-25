@@ -10,7 +10,7 @@ import {
   SESSION_SIZE,
   starsFor,
 } from "../src/lessons/catalog";
-import { isCorrectAnswer, speechVocabulary } from "../src/tutor/grading";
+import { isCorrectAnswer, normalizeAnswer, speechVocabulary } from "../src/tutor/grading";
 
 describe("grading", () => {
   it.each([
@@ -45,6 +45,19 @@ describe("grading", () => {
     expect(isCorrectAnswer("kak tiga", ["3"])).toBe(true);
     expect(isCorrectAnswer("huruf eh", ["e", "eh"], ["a", "ah", "e", "eh"])).toBe(true);
     expect(isCorrectAnswer("eh, a", ["a", "ah"], ["a", "ah", "e", "eh"])).toBe(true);
+  });
+
+  it("ignores words that are only properties of Object.prototype", () => {
+    expect(isCorrectAnswer("constructor", ["7"])).toBe(false);
+    expect(isCorrectAnswer("toString", ["7"])).toBe(false);
+    expect(normalizeAnswer("constructor")).toBe("constructor");
+  });
+
+  it("reads each of several number phrases in a row", () => {
+    expect(normalizeAnswer("dua belas dua belas")).toBe("12 12");
+    expect(normalizeAnswer("tiga belas dua")).toBe("13 2");
+    expect(isCorrectAnswer("dua belas dua belas", ["12"])).toBe(true);
+    expect(isCorrectAnswer("dua belas dua", ["12"])).toBe(false);
   });
 
   it("takes the last number when a child counts aloud", () => {

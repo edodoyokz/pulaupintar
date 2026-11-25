@@ -22,15 +22,18 @@ const Island = () => {
       const greeting = limitReached
         ? `Hari ini kamu sudah belajar banyak, ${childName}. Yuk, istirahat dulu!`
         : `Halo ${childName}! Mau belajar di mana hari ini?`;
-      prepareAudio().then(async () => {
-        if (!active) return;
-        setSpeaking(true);
-        try {
-          await speak([{ lang: "id", text: greeting }]);
-        } finally {
-          if (active) setSpeaking(false);
-        }
-      });
+      prepareAudio()
+        .then(async () => {
+          if (!active) return;
+          setSpeaking(true);
+          try {
+            await speak([{ lang: "id", text: greeting }]);
+          } finally {
+            if (active) setSpeaking(false);
+          }
+        })
+        // No audio permission or audio setup failed: the island works without the spoken greeting.
+        .catch(() => undefined);
       return () => {
         active = false;
         setSpeaking(false);

@@ -130,23 +130,21 @@ export const stopSpeaking = () => {
 };
 
 // Device voice, used only when the cloud voice can't be reached.
-const speakOnDevice = (segments: SpeechSegment[]) =>
-  segments.reduce<Promise<void>>(
-    (previous, segment) =>
-      previous.then(
-        () =>
-          new Promise<void>((resolve) => {
-            Speech.speak(segment.text, {
-              language: segment.lang === "en" ? "en-US" : "id-ID",
-              rate: 0.9,
-              onDone: resolve,
-              onError: () => resolve(),
-              onStopped: resolve,
-            });
-          }),
-      ),
-    Promise.resolve(),
-  );
+// Checks the generation before each segment, so stopSpeaking also cancels the segments not yet spoken.
+const speakOnDevice = async (segments: SpeechSegment[], generation: number) => {
+  for (const segment of segments) {
+    if (generation !== speechGeneration) return;
+    await new Promise<void>((resolve) => {
+      Speech.speak(segment.text, {
+        language: segment.lang === "en" ? "en-US" : "id-ID",
+        rate: 0.9,
+        onDone: resolve,
+        onError: () => resolve(),
+        onStopped: resolve,
+      });
+    });
+  }
+};
 
 export const speak = async (segments: SpeechSegment[]): Promise<void> => {
   const generation = speechGeneration;
@@ -173,16 +171,21 @@ export const speak = async (segments: SpeechSegment[]): Promise<void> => {
     }
   } catch {
     if (generation !== speechGeneration) return;
-    await speakOnDevice(segments);
+    await speakOnDevice(segments, generation);
   }
 };
 
 export const useChildMicrophone = () => {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const liveListener = useRef<InstanceType<LiveVoice["Listener"]> | null>(null);
+  // The start still in progress, so stop and cancel never run while the microphone is half started.
+  const pendingStart = useRef<Promise<void> | null>(null);
+  const settleStart = async () => {
+    await pendingStart.current?.catch(() => undefined);
+  };
 
   /** `hints`: the lesson's answer language and every word a child may answer with, so speech is heard in that language. */
-  const start = async (hints: ListenHints) => {
+  const startRecording = async (hints: ListenHints) => {
     const live = getLiveVoice();
     if (live && !liveListeningBroken) {
       const listener = new live.Listener();
@@ -201,8 +204,15 @@ export const useChildMicrophone = () => {
     recorder.record();
   };
 
+  const start = (hints: ListenHints): Promise<void> => {
+    const pending = startRecording(hints);
+    pendingStart.current = pending;
+    return pending;
+  };
+
   /** Throws when the recording or the speech-to-text call fails, so a failure never counts as a wrong answer. */
   const stopAndTranscribe = async (hints: ListenHints): Promise<string> => {
+    await settleStart();
     const listener = liveListener.current;
     if (listener) {
       liveListener.current = null;
@@ -231,6 +241,7 @@ export const useChildMicrophone = () => {
   };
 
   const cancel = async () => {
+    await settleStart();
     const listener = liveListener.current;
     liveListener.current = null;
     await listener?.cancel().catch(() => undefined);

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createSaveQueue } from "./save-queue";
 import {
   DEFAULT_DAILY_LIMIT_MINUTES,
   loadAppData,
@@ -29,6 +30,9 @@ type ProfileContextValue = {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
+// Module-level: one queue for the one data file, in-flight saves finish in call order.
+const queueSave = createSaveQueue(saveAppData, (error) => console.warn("could not save profile data", error));
+
 export const ProfileProvider = ({ children }: { children: ReactNode }) => {
   const [data, setData] = useState<AppData | null>(null);
   // Latest data, so a write from a screen that is closing never uses an old copy.
@@ -44,7 +48,7 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
   const update = async (next: AppData) => {
     dataRef.current = next;
     setData(next);
-    await saveAppData(next);
+    await queueSave(next);
   };
 
   const activeChild = (current: AppData) =>
@@ -91,7 +95,6 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
       ...profile,
       stars: 0,
       completedLessons: [],
-      usage: undefined,
     }));
 
   const recordSession = ({ lessonId, stars, passed, seconds }: SessionResult) =>

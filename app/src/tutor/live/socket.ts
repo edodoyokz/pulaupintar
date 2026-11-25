@@ -27,25 +27,33 @@ export const openLiveConnection = async (
     const socket = new NativeWebSocket(url, null, { headers });
     socket.binaryType = "arraybuffer";
     let ready = false;
+    // onerror is normally followed by onclose; only the first of the two is acted on.
+    let closed = false;
     const timer = setTimeout(() => fail(new Error("live setup timed out")), SETUP_TIMEOUT_MS);
     const connection: LiveConnection = {
-      send: (message) => socket.send(JSON.stringify(message)),
+      send: (message) => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+      },
       close: () => socket.close(),
       isOpen: () => socket.readyState === WebSocket.OPEN,
     };
     const fail = (error: Error) => {
+      if (closed) return;
+      closed = true;
       clearTimeout(timer);
       socket.close();
-      if (!ready) reject(error);
+      if (ready) handlers.onClose();
+      else reject(error);
     };
     socket.onerror = () => fail(new Error("live socket error"));
-    socket.onclose = () => {
-      clearTimeout(timer);
-      if (!ready) reject(new Error("live socket closed before setup"));
-      else handlers.onClose();
-    };
+    socket.onclose = () => fail(new Error("live socket closed before setup"));
     socket.onmessage = (event) => {
-      const message = JSON.parse(frameToText(event.data)) as LiveServerMessage;
+      let message: LiveServerMessage;
+      try {
+        message = JSON.parse(frameToText(event.data)) as LiveServerMessage;
+      } catch {
+        return;
+      }
       if (!ready && message.setupComplete !== undefined) {
         ready = true;
         clearTimeout(timer);

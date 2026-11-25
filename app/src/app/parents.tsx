@@ -11,10 +11,13 @@ import { colors, fonts, radius, spacing, type } from "@/ui/theme";
 const LIMITS = [10, 15, 20];
 const AGES = [4, 5, 6, 7];
 
-// A small sum a young child can't solve keeps this area for the adults.
+// A two-digit sum with a carry, too hard for a 6-7 year old, still typed on a number pad. The sum stays below 100.
 const makeGate = () => {
-  const a = 4 + Math.floor(Math.random() * 6);
-  const b = 4 + Math.floor(Math.random() * 6);
+  const randomInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
+  const unitsA = randomInt(2, 9);
+  const unitsB = randomInt(10 - unitsA, 9);
+  const a = randomInt(1, 4) * 10 + unitsA;
+  const b = randomInt(1, 4) * 10 + unitsB;
   return { question: `Berapa ${a} + ${b}?`, answer: String(a + b) };
 };
 
@@ -304,7 +307,7 @@ const Parents = () => {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Atur ulang kemajuan</Text>
-            <Text style={styles.small}>Menghapus bintang, stiker, dan level selesai milik {child.name}.</Text>
+            <Text style={styles.small}>Menghapus bintang, stiker, dan level selesai milik {child.name}. Waktu belajar hari ini tidak ikut diatur ulang.</Text>
             {confirmReset ? (
               <View style={styles.formActions}>
                 <Pressable onPress={() => setConfirmReset(false)} style={styles.secondaryBtn} accessibilityRole="button">
