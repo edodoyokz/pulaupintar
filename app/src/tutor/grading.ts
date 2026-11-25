@@ -21,9 +21,9 @@ const NUMBER_PHRASES: Record<Lang, string[]> = {
   en: Object.keys(NUMBER_WORDS.en).sort((a, b) => b.length - a.length),
 };
 
-// Dropped only from what the child said, never from an expected answer.
-// Letters and letter names ("a", "em") are left out on purpose: they are answers in Membaca.
-const FILLER_WORDS = new Set(["eh", "emm", "hmm", "ehm", "itu", "ya", "kak", "jawabannya", "adalah", "the", "it's", "is"]);
+// Dropped only from what the child said, never from an expected answer, and only when
+// other words remain: "em, be" is "be", but a lone "em" (the letter M) or "kak" (K) stays.
+const FILLER_WORDS = new Set(["eh", "em", "emm", "hmm", "ehm", "itu", "ya", "kak", "jawabannya", "adalah", "the", "it's", "is"]);
 
 const toWords = (text: string, lang: Lang): string[] => {
   let normalized = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\s+/g, " ").trim()} `;
@@ -33,10 +33,11 @@ const toWords = (text: string, lang: Lang): string[] => {
   return normalized.trim().split(" ").filter(Boolean);
 };
 
-export const normalizeAnswer = (text: string, lang: Lang = "id"): string =>
-  toWords(text, lang)
-    .filter((word) => !FILLER_WORDS.has(word))
-    .join(" ");
+export const normalizeAnswer = (text: string, lang: Lang = "id"): string => {
+  const words = toWords(text, lang);
+  const content = words.filter((word) => !FILLER_WORDS.has(word));
+  return (content.length > 0 ? content : words).join(" ");
+};
 
 const isNumber = (word: string) => /^\p{N}+$/u.test(word);
 

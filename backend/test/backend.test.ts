@@ -5,6 +5,7 @@ import { FALLBACK_LINES, filterSegments } from "../src/safety";
 import {
   claudeModel,
   openAiCompatibleModel,
+  isSafetyReply,
   qwenGuardModel,
   runTutorTurn,
   safetyGuard,
@@ -202,6 +203,17 @@ describe("withFallback", () => {
   ])("uses the backup provider when the main one %s", async (_, primary) => {
     const result = await runTutorTurn(withFallback(primary, good), turn);
     expect(result).toEqual({ segments: [{ lang: "id", text: "Dari cadangan!" }], fallbackUsed: false });
+  });
+
+  it("uses the backup when the main safety model answers in the wrong format", async () => {
+    const tutor: TutorModel = async () => ({
+      text: JSON.stringify({ segments: [{ lang: "id", text: "Betul!" }] }),
+      complete: true,
+    });
+    const chatty: TutorModel = async () => ({ text: "Looks safe to me", complete: true });
+    const backup: TutorModel = async () => ({ text: '```json\n{"safe": true}\n```', complete: true });
+    const result = await runTutorTurn(tutor, turn, safetyGuard(withFallback(chatty, backup, isSafetyReply)));
+    expect(result.fallbackUsed).toBe(false);
   });
 
   it("does not call the backup when the main one works", async () => {

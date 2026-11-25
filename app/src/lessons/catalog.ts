@@ -93,9 +93,12 @@ const letter = (value: string): AppItem => ({
 // Letter names as Indonesian children say them, so speech-to-text can return either form.
 const LETTER_NAMES: Record<string, string> = { b: "be", d: "de", k: "ka", m: "em", p: "pe", s: "es", t: "te" };
 
+// Speech-to-text often hears the letter name "ka" as the common word "kak".
+const SOUNDS_LIKE: Record<string, string[]> = { k: ["kak"] };
+
 const consonant = (value: string): AppItem => ({
   question: "Huruf apa ini?",
-  answers: [value, LETTER_NAMES[value]],
+  answers: [value, LETTER_NAMES[value], ...(SOUNDS_LIKE[value] ?? [])],
   visual: `huruf ${value.toUpperCase()}`,
   picture: { kind: "text", text: value.toUpperCase() },
 });
@@ -115,9 +118,14 @@ const translate = (indonesian: string, answers: string[], topic: string): AppIte
   picture: { kind: "text", text: indonesian },
 });
 
+const ENGLISH_NUMBER: Record<number, string> = {
+  1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+};
+
+// The English word comes first so the tutor says "three", not a digit Indonesian TTS would read as "tiga".
 const englishNumber = (n: number): AppItem => ({
   question: `Apa Bahasa Inggrisnya angka ${NUMBER_WORD[n]}?`,
-  answers: [String(n)],
+  answers: [ENGLISH_NUMBER[n], String(n)],
   visual: `angka ${n}`,
   picture: { kind: "text", text: String(n) },
 });
@@ -266,8 +274,8 @@ const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     sticker: { name: "Ramah Sekali", object: "ball" },
     pool: [
       translate("halo", ["hello", "hi"], "salam"), translate("selamat pagi", ["good morning"], "salam"),
-      translate("terima kasih", ["thank you", "thanks"], "salam"), translate("selamat tinggal", ["goodbye", "good bye", "bye"], "salam"),
-      translate("selamat malam", ["good night"], "salam"),
+      translate("terima kasih", ["thank you", "thanks", "thankyou"], "salam"), translate("selamat tinggal", ["goodbye", "good bye", "bye"], "salam"),
+      translate("selamat malam", ["good night", "goodnight"], "salam"),
     ],
   },
 ];

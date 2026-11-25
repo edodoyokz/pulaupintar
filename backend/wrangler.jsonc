@@ -10,7 +10,7 @@
     "TUTOR_MODEL": "hy4-flash",
     "SAFETY_PROVIDER": "sumopod",
     "SAFETY_MODEL": "jev-1.14.0",
-    // Backups when Sumopod errors, is slow (over 5 s) or returns a cut-off reply.
+    // Backups when Sumopod errors, is slow (tutor over 4 s, safety over 2.5 s) or returns a cut-off reply.
     "TUTOR_FALLBACK_PROVIDER": "pollinations",
     "TUTOR_FALLBACK_MODEL": "openai/gpt-5-nano",
     "SAFETY_FALLBACK_PROVIDER": "pollinations",

@@ -5,8 +5,12 @@ import { synthesize, transcribe } from "./speech";
 import {
   claudeModel,
   openAiCompatibleModel,
+  isSafetyReply,
+  isTutorReply,
   qwenGuardModel,
   runTutorTurn,
+  SAFETY_CALL_TIMEOUT_MS,
+  TUTOR_CALL_TIMEOUT_MS,
   SAFETY_OUTPUT_SCHEMA,
   safetyGuard,
   withFallback,
@@ -21,18 +25,22 @@ const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a ch
 const apiKeyFor = (env: Env, provider: OpenAiCompatibleProvider) =>
   (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
 
-const backupModel = (
-  env: Env,
-  provider: OpenAiCompatibleProvider | undefined,
-  model: string | undefined,
-  schema?: { name: string; schema: object },
-): TutorModel | undefined =>
-  provider ? openAiCompatibleModel({ provider, apiKey: apiKeyFor(env, provider), model, schema }) : undefined;
+const tutorBackup = (env: Env): TutorModel | undefined => {
+  const provider = env.TUTOR_FALLBACK_PROVIDER;
+  if (!provider) return undefined;
+  return openAiCompatibleModel({
+    provider,
+    apiKey: apiKeyFor(env, provider),
+    model: env.TUTOR_FALLBACK_MODEL,
+    reasoningEffort: env.TUTOR_REASONING_EFFORT,
+  });
+};
 
 const tutorModelFor = (env: Env): TutorModel => {
-  const backup = backupModel(env, env.TUTOR_FALLBACK_PROVIDER, env.TUTOR_FALLBACK_MODEL);
+  const backup = tutorBackup(env);
   if (env.TUTOR_PROVIDER === "claude") {
-    return withFallback(claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })), backup);
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, timeout: TUTOR_CALL_TIMEOUT_MS, maxRetries: 0 });
+    return withFallback(claudeModel(client), backup, isTutorReply);
   }
   const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
   const primary = openAiCompatibleModel({
@@ -41,7 +49,7 @@ const tutorModelFor = (env: Env): TutorModel => {
     model: env.TUTOR_MODEL,
     reasoningEffort: env.TUTOR_REASONING_EFFORT,
   });
-  return withFallback(primary, backup);
+  return withFallback(primary, backup, isTutorReply);
 };
 
 /** Backup safety checker; a Qwen3Guard model is called in its own classifier format. */
@@ -49,8 +57,9 @@ const safetyBackup = (env: Env): TutorModel | undefined => {
   const provider = env.SAFETY_FALLBACK_PROVIDER;
   const model = env.SAFETY_FALLBACK_MODEL;
   if (!provider) return undefined;
-  if (model?.includes("qwen3guard")) return qwenGuardModel({ provider, apiKey: apiKeyFor(env, provider), model });
-  return backupModel(env, provider, model, SAFETY_OUTPUT_SCHEMA);
+  const apiKey = apiKeyFor(env, provider);
+  if (model?.toLowerCase().includes("qwen3guard")) return qwenGuardModel({ provider, apiKey, model });
+  return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs: SAFETY_CALL_TIMEOUT_MS });
 };
 
 const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
@@ -61,8 +70,9 @@ const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
     apiKey: apiKeyFor(env, provider),
     model: env.SAFETY_MODEL,
     schema: SAFETY_OUTPUT_SCHEMA,
+    timeoutMs: SAFETY_CALL_TIMEOUT_MS,
   });
-  return safetyGuard(withFallback(primary, safetyBackup(env)));
+  return safetyGuard(withFallback(primary, safetyBackup(env), isSafetyReply));
 };
 
 const app = new Hono<{ Bindings: Env }>();

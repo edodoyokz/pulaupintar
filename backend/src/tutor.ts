@@ -10,6 +10,9 @@ export const OPENAI_COMPATIBLE_PROVIDERS = {
   sumopod: { url: "https://ai.sumopod.com/v1/chat/completions", defaultModel: "gpt-5-nano" },
 } as const;
 
+export const TUTOR_CALL_TIMEOUT_MS = 4_000;
+export const SAFETY_CALL_TIMEOUT_MS = 2_500;
+
 export type OpenAiCompatibleProvider = keyof typeof OPENAI_COMPATIBLE_PROVIDERS;
 
 /** What the tutor needs from any LLM: JSON text, and whether the model finished normally. */
@@ -84,9 +87,13 @@ const describeTurn = (request: TutorTurnRequest): string => {
   return lines.join("\n");
 };
 
-const parseSegments = (text: string): SpeechSegment[] => {
+/** Parses a JSON reply, tolerating a ```json fence that some models add despite JSON mode. */
+const parseJson = (text: string): unknown =>
+  JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+
+export const parseSegments = (text: string): SpeechSegment[] => {
   try {
-    const parsed = JSON.parse(text) as { segments?: SpeechSegment[] };
+    const parsed = parseJson(text) as { segments?: SpeechSegment[] };
     return Array.isArray(parsed.segments) ? parsed.segments : [];
   } catch {
     return [];
@@ -146,8 +153,8 @@ export const openAiCompatibleModel =
     const doFetch = options.fetch ?? fetch;
     const response = await doFetch(provider.url, {
       method: "POST",
-      // A slow provider should give way to the fallback before the app's 15 s limit.
-      signal: AbortSignal.timeout(options.timeoutMs ?? 5_000),
+      // Budget per turn, under the app's 15 s limit: tutor 4 s + backup 4 s + guard 2.5 s + backup 2.5 s.
+      signal: AbortSignal.timeout(options.timeoutMs ?? TUTOR_CALL_TIMEOUT_MS),
       headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: options.model || provider.defaultModel,
@@ -205,6 +212,19 @@ export type SafetyGuard = (segments: SpeechSegment[]) => Promise<boolean>;
  * Safety check with a model such as jev-1.14.0. It fails closed:
  * an error, a cut-off reply or anything but {"safe": true} counts as unsafe.
  */
+/** The guard's verdict, or undefined when the reply is not a {"safe": boolean} object. */
+export const parseSafeVerdict = (text: string): boolean | undefined => {
+  try {
+    const safe = (parseJson(text) as { safe?: unknown }).safe;
+    return typeof safe === "boolean" ? safe : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const isTutorReply = (text: string) => parseSegments(text).length > 0;
+export const isSafetyReply = (text: string) => parseSafeVerdict(text) !== undefined;
+
 export const safetyGuard =
   (model: TutorModel): SafetyGuard =>
   async (segments) => {
@@ -212,7 +232,7 @@ export const safetyGuard =
       const lines = segments.map((segment) => `[${segment.lang}] ${segment.text}`).join("\n");
       const { text, complete } = await model(SAFETY_PROMPT, lines);
       if (!complete) return false;
-      return (JSON.parse(text) as { safe?: unknown }).safe === true;
+      return parseSafeVerdict(text) === true;
     } catch (error) {
       console.error(JSON.stringify({ event: "safety_error", message: String(error) }));
       return false;
@@ -224,6 +244,8 @@ export const safetyGuard =
  * categories and no JSON mode: it judges the last assistant message and answers "Safety: Safe",
  * "Unsafe" or "Controversial". Only "Safe" passes; the reply is turned into {"safe": ...}
  * so it plugs into safetyGuard like any other model.
+ * Weaker than the main check: it ignores SAFETY_PROMPT's child-specific rules (no comparing,
+ * no brands, stay on topic). filterSegments' word and link filters still apply before it.
  */
 export const qwenGuardModel =
   (options: { provider: OpenAiCompatibleProvider; apiKey: string; model: string; fetch?: typeof fetch; timeoutMs?: number }): TutorModel =>
@@ -231,7 +253,7 @@ export const qwenGuardModel =
     const provider = OPENAI_COMPATIBLE_PROVIDERS[options.provider];
     const response = await (options.fetch ?? fetch)(provider.url, {
       method: "POST",
-      signal: AbortSignal.timeout(options.timeoutMs ?? 5_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? SAFETY_CALL_TIMEOUT_MS),
       headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: options.model,
@@ -260,15 +282,18 @@ export const qwenGuardModel =
     return { text: JSON.stringify({ safe: verdict.toLowerCase() === "safe" }), complete: true };
   };
 
-/** Tries the primary model; on an error or a cut-off reply, asks the backup instead. */
+/**
+ * Tries the primary model; on an error, a timeout, a cut-off reply or a reply in the
+ * wrong format (isValid), asks the backup instead.
+ */
 export const withFallback =
-  (primary: TutorModel, backup?: TutorModel): TutorModel =>
+  (primary: TutorModel, backup?: TutorModel, isValid: (text: string) => boolean = () => true): TutorModel =>
   async (system, user) => {
     if (!backup) return primary(system, user);
     try {
       const result = await primary(system, user);
-      if (result.complete) return result;
-      console.log(JSON.stringify({ event: "fallback_model", reason: "incomplete" }));
+      if (result.complete && isValid(result.text)) return result;
+      console.log(JSON.stringify({ event: "fallback_model", reason: result.complete ? "bad format" : "incomplete" }));
     } catch (error) {
       console.log(JSON.stringify({ event: "fallback_model", reason: String(error) }));
     }

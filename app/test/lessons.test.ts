@@ -40,6 +40,9 @@ describe("grading", () => {
     expect(isCorrectAnswer("three", ["3"], [], "en")).toBe(true);
     expect(isCorrectAnswer("tiga", ["3"], [], "en")).toBe(false);
     expect(isCorrectAnswer("em", ["m", "em"])).toBe(true);
+    expect(isCorrectAnswer("em, be", ["b", "be"], ["m", "em", "b", "be"])).toBe(true);
+    expect(isCorrectAnswer("Kak", ["k", "ka", "kak"], ["k", "ka", "kak", "b", "be"])).toBe(true);
+    expect(isCorrectAnswer("kak tiga", ["3"])).toBe(true);
   });
 
   it("takes the last number when a child counts aloud", () => {
