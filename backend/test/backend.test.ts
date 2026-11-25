@@ -288,4 +288,18 @@ describe("routes", () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it.each([
+    ["malformed JSON", "{not-json"],
+    ["invalid step kind", JSON.stringify({ ...turn, step: { kind: "hack" } })],
+    ["invalid subject", JSON.stringify({ ...turn, subject: "fisika" })],
+    ["missing child", JSON.stringify({ ...turn, child: undefined })],
+  ])("rejects /v1/tutor/turn with 400 on %s", async (_, body) => {
+    const response = await app.request(
+      "/v1/tutor/turn",
+      { method: "POST", body, headers: { "x-app-token": "secret" } },
+      env,
+    );
+    expect(response.status).toBe(400);
+  });
 });

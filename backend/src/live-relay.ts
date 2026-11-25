@@ -50,12 +50,20 @@ export const runLiveRelay = (env: Env, role: LiveRole, client: RelaySocket, upst
   let closed = false;
   let turnActive = false;
   let audioChars = 0;
+  let turnChars = 0;
+  let turnTokens = 0;
+  let totalTokens = 0;
   let chain: Promise<void> = Promise.resolve();
 
   const closeAll = (code = 1000, reason = "done") => {
     if (closed) return;
     closed = true;
     clearTimeout(limit);
+    if (role === "listen" && audioChars > 0) {
+      console.log(
+        JSON.stringify({ event: "cost", kind: "stt", provider: "gemini-live-relay", audioChars, tokens: totalTokens }),
+      );
+    }
     for (const socket of [client, upstream]) {
       try {
         socket.close(code, reason);
@@ -78,12 +86,21 @@ export const runLiveRelay = (env: Env, role: LiveRole, client: RelaySocket, upst
       toClient({ setupComplete: {} });
       return;
     }
+    if (typeof message.usageMetadata?.totalTokenCount === "number") {
+      turnTokens = message.usageMetadata.totalTokenCount;
+      totalTokens = message.usageMetadata.totalTokenCount;
+    }
     const content = message.serverContent ?? {};
     if (role === "speak") {
       const parts = ((content.modelTurn?.parts ?? []) as Json[]).filter((part) => typeof part.inlineData?.data === "string");
       if (parts.length > 0) toClient({ serverContent: { modelTurn: { parts: parts.map((part) => ({ inlineData: { data: part.inlineData.data } })) } } });
       if (content.turnComplete) {
+        console.log(
+          JSON.stringify({ event: "cost", kind: "tts", provider: "gemini-live-relay", characters: turnChars, tokens: turnTokens }),
+        );
         turnActive = false;
+        turnChars = 0;
+        turnTokens = 0;
         toClient({ serverContent: { turnComplete: true } });
       }
       return;
@@ -104,6 +121,8 @@ export const runLiveRelay = (env: Env, role: LiveRole, client: RelaySocket, upst
         return;
       }
       turnActive = true;
+      turnChars = segments.reduce((sum, segment) => sum + segment.text.length, 0);
+      turnTokens = 0;
       toUpstream({ realtimeInput: { text: segments.map((segment) => segment.text).join(" ") } });
       return;
     }

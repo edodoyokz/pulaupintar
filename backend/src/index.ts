@@ -23,6 +23,58 @@ import {
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
+const VALID_SUBJECTS = new Set(["berhitung", "membaca", "inggris"]);
+const VALID_STEP_KINDS = new Set(["teach", "ask", "praise", "hint", "reveal", "wrapup"]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readJson = async <T>(c: Context<{ Bindings: Env }>): Promise<T | null> => {
+  try {
+    return await c.req.json<T>();
+  } catch {
+    return null;
+  }
+};
+
+export const validateTutorTurnRequest = (body: unknown): TutorTurnRequest | null => {
+  if (!isRecord(body)) return null;
+  const { child, subject, lesson, step } = body;
+  if (!isRecord(child) || typeof child.name !== "string") return null;
+  const name = child.name.trim();
+  if (name.length === 0 || name.length > 60) return null;
+  if (typeof child.age !== "number" || !Number.isFinite(child.age) || child.age < 1 || child.age > 18) return null;
+  if (typeof subject !== "string" || !VALID_SUBJECTS.has(subject)) return null;
+  if (!isRecord(lesson) || typeof lesson.title !== "string" || typeof lesson.goal !== "string") return null;
+  if (lesson.title.trim().length === 0 || lesson.goal.trim().length === 0) return null;
+  if (!isRecord(step) || typeof step.kind !== "string" || !VALID_STEP_KINDS.has(step.kind)) return null;
+
+  let validItem: TutorTurnRequest["step"]["item"];
+  if (step.item !== undefined) {
+    if (!isRecord(step.item) || typeof step.item.question !== "string" || !Array.isArray(step.item.answers)) return null;
+    if (step.item.answers.length === 0 || !step.item.answers.every((answer) => typeof answer === "string")) return null;
+    if (step.item.visual !== undefined && typeof step.item.visual !== "string") return null;
+    validItem = {
+      question: step.item.question,
+      answers: step.item.answers,
+      ...(step.item.visual !== undefined ? { visual: step.item.visual } : {}),
+    };
+  }
+  if (step.childSaid !== undefined && typeof step.childSaid !== "string") return null;
+  if (step.attempt !== undefined && (typeof step.attempt !== "number" || !Number.isFinite(step.attempt))) return null;
+
+  return {
+    child: { name, age: child.age },
+    subject: subject as TutorTurnRequest["subject"],
+    lesson: { title: lesson.title, goal: lesson.goal },
+    step: {
+      kind: step.kind as TutorTurnRequest["step"]["kind"],
+      ...(validItem ? { item: validItem } : {}),
+      ...(step.childSaid !== undefined ? { childSaid: step.childSaid } : {}),
+      ...(step.attempt !== undefined ? { attempt: step.attempt } : {}),
+    },
+  };
+};
 
 const apiKeyFor = (env: Env, provider: OpenAiCompatibleProvider) =>
   (provider === "sumopod" ? env.SUMOPOD_API_KEY : provider === "gemini" ? env.GEMINI_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
@@ -85,14 +137,18 @@ app.use("/v1/*", async (c, next) => {
 });
 
 app.post("/v1/tutor/turn", async (c) => {
-  const request = await c.req.json<TutorTurnRequest>();
+  const raw = await readJson<unknown>(c);
+  const request = validateTutorTurnRequest(raw);
+  if (!request) {
+    return c.json({ error: "invalid request" }, 400);
+  }
   return c.json(await runTutorTurn(tutorModelFor(c.env), request, safetyGuardFor(c.env)));
 });
 
 app.post("/v1/tts", async (c) => {
-  const { segments: requested } = await c.req.json<TtsRequest>();
+  const body = await readJson<Partial<TtsRequest>>(c);
   // Only short, filtered lines can be voiced, so the app token can't run up the TTS bill or speak anything.
-  const segments = validateSpeechRequest(requested);
+  const segments = validateSpeechRequest(body?.segments);
   if (!segments) {
     return c.json({ error: "segments missing, too long, or not allowed" }, 400);
   }
@@ -104,8 +160,8 @@ app.post("/v1/tts", async (c) => {
 });
 
 app.post("/v1/stt", async (c) => {
-  const request = await c.req.json<SttRequest>();
-  if (!request.audioBase64 || request.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
+  const request = await readJson<SttRequest>(c);
+  if (!request || typeof request.audioBase64 !== "string" || !request.audioBase64 || request.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
     return c.json({ error: "audio missing or too long" }, 400);
   }
   if (c.env.SPEECH_PROVIDER === "gemini" && request.encoding === "AMR_WB") {

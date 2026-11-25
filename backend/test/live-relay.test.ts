@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runLiveRelay, type RelaySocket } from "../src/live-relay";
 import type { Env } from "../src/types";
 
@@ -137,5 +137,49 @@ describe("listen relay", () => {
     client.receive(chunk("QUJD"));
     await settle();
     expect(upstream.sent).toHaveLength(1);
+  });
+});
+
+describe("relay cost logging", () => {
+  it("logs tts cost when a speak turn completes", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const { client, upstream } = await start("speak");
+      client.receive({ segments: [{ lang: "id", text: "Halo adik" }] });
+      await settle();
+      upstream.receive({ usageMetadata: { totalTokenCount: 42 }, serverContent: { turnComplete: true } });
+      await settle();
+      expect(logSpy).toHaveBeenCalledWith(
+        JSON.stringify({ event: "cost", kind: "tts", provider: "gemini-live-relay", characters: 9, tokens: 42 }),
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("logs stt cost when a listen session closes with audio", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
+      const client: RelaySocket & { receive: (data: unknown) => void } = {
+        addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
+        send: () => undefined,
+        close: () => listeners.close?.forEach((l) => l({})),
+        receive: (data) => listeners.message?.forEach((l) => l({ data: JSON.stringify(data) })),
+      };
+      const upstream = fakeSocket();
+      runLiveRelay(env, "listen", client, upstream);
+      upstream.receive({ setupComplete: {} });
+      await settle();
+      client.receive({ realtimeInput: { audio: { data: "QUJD", mimeType: "audio/pcm;rate=16000" } } });
+      upstream.receive({ usageMetadata: { totalTokenCount: 15 } });
+      await settle();
+      client.close();
+      expect(logSpy).toHaveBeenCalledWith(
+        JSON.stringify({ event: "cost", kind: "stt", provider: "gemini-live-relay", audioChars: 4, tokens: 15 }),
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });

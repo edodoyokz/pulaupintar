@@ -25,9 +25,9 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 };
 
 const synthesizeSegment = async (env: Env, segment: SpeechSegment): Promise<Uint8Array> => {
-  const response = await fetch(`${TTS_URL}?key=${env.GOOGLE_CLOUD_API_KEY}`, {
+  const response = await fetch(TTS_URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-goog-api-key": env.GOOGLE_CLOUD_API_KEY ?? "" },
     body: JSON.stringify({
       input: { text: segment.text },
       voice: voiceFor(env, segment.lang),
@@ -60,9 +60,9 @@ export const synthesize = async (env: Env, segments: SpeechSegment[]): Promise<s
 export const transcribe = async (env: Env, request: SttRequest): Promise<string> => {
   const primary = LANGUAGE_CODES[request.expect];
   const secondary = request.expect === "id" ? LANGUAGE_CODES.en : LANGUAGE_CODES.id;
-  const response = await fetch(`${STT_URL}?key=${env.GOOGLE_CLOUD_API_KEY}`, {
+  const response = await fetch(STT_URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-goog-api-key": env.GOOGLE_CLOUD_API_KEY ?? "" },
     body: JSON.stringify({
       config: {
         encoding: request.encoding,
