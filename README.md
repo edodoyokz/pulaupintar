@@ -9,7 +9,7 @@ Spesifikasi produk dan kurikulum: lihat dokumen "Pulaupintar — Spesifikasi Tut
 | Folder | Isi |
 | --- | --- |
 | `app/` | Aplikasi HP (Expo SDK 58, Expo Router, TypeScript) |
-| `backend/` | Cloudflare Worker (Hono) yang menyimpan API key dan memanggil Claude, text-to-speech, dan speech-to-text |
+| `backend/` | Cloudflare Worker (Hono) yang menyimpan API key dan memanggil LLM (utama Sumopod hy4-flash, cadangan Pollinations; cek keamanan jev-1.14.0 dengan cadangan qwen3guard), text-to-speech, dan speech-to-text |
 
 Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menekan mikrofon dan menjawab (rekam → STT), lalu aplikasi menilai jawaban dari kunci jawaban (bukan LLM) dan meminta tutor memuji, memberi petunjuk, atau menunjukkan jawaban.
 
@@ -18,14 +18,14 @@ Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menek
 ```bash
 cd backend
 npm install
-cp .dev.vars.example .dev.vars   # isi ANTHROPIC_API_KEY, GOOGLE_CLOUD_API_KEY, APP_TOKEN
+cp .dev.vars.example .dev.vars   # isi SUMOPOD_API_KEY, GOOGLE_CLOUD_API_KEY, APP_TOKEN
 npm run dev                      # http://localhost:8787
 npm test
 ```
 
 - `GOOGLE_CLOUD_API_KEY` perlu mengaktifkan Cloud Text-to-Speech API dan Cloud Speech-to-Text API.
 - `APP_TOKEN` adalah kata sandi bersama antara aplikasi dan backend, supaya orang lain tidak bisa memakai API key.
-- Deploy: `npx wrangler secret put ANTHROPIC_API_KEY` (dan seterusnya), lalu `npm run deploy`.
+- Deploy: `npx wrangler secret put SUMOPOD_API_KEY` (dan seterusnya), lalu `npm run deploy`.
 - Setiap panggilan AI mencatat log `{"event":"cost", ...}` untuk menghitung biaya per sesi (dasar harga langganan nanti).
 
 ## Menjalankan aplikasi

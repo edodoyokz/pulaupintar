@@ -52,6 +52,12 @@ const ObjectRow = ({ kind, count, size }: { kind: ObjectKind; count: number; siz
 
 const sizeFor = (count: number) => (count <= 5 ? 68 : count <= 10 ? 50 : 34);
 
+// A letter or number fills the card; words and short sentences get smaller.
+const textSizeFor = (text: string) => {
+  const fontSize = text.length <= 2 ? 140 : text.length <= 6 ? 84 : 56;
+  return { fontSize, lineHeight: Math.round(fontSize * 1.15) };
+};
+
 const Sign = ({ children }: { children: string }) => <Text style={styles.sign}>{children}</Text>;
 
 export const PictureView = ({ picture }: { picture: Picture }) => {
@@ -75,7 +81,11 @@ export const PictureView = ({ picture }: { picture: Picture }) => {
         </View>
       );
     case "text":
-      return <Text style={styles.bigText}>{picture.text}</Text>;
+      return (
+        <Text style={[styles.bigText, textSizeFor(picture.text)]} adjustsFontSizeToFit numberOfLines={2}>
+          {picture.text}
+        </Text>
+      );
     case "swatch":
       return <View style={[styles.swatch, { backgroundColor: picture.color }]} />;
   }
@@ -87,6 +97,6 @@ const styles = StyleSheet.create({
   divider: { width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: "#F2C29B" },
   sum: { alignItems: "center", gap: spacing.sm },
   sign: { fontFamily: fonts.display, fontSize: 40, color: colors.ink },
-  bigText: { fontFamily: fonts.display, fontSize: 140, lineHeight: 160, color: colors.ink },
+  bigText: { fontFamily: fonts.display, textAlign: "center", color: colors.ink },
   swatch: { width: 150, height: 150, borderRadius: 75, borderWidth: 4, borderColor: colors.ink },
 });

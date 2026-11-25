@@ -1,8 +1,15 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
-import { runTutorTurn } from "../src/tutor";
+import {
+  openAiCompatibleModel,
+  isSafetyReply,
+  qwenGuardModel,
+  runTutorTurn,
+  safetyGuard,
+  withFallback,
+  type TutorModel,
+} from "../src/tutor";
 import type { TutorTurnRequest } from "../src/types";
 
 const turn: TutorTurnRequest = {
@@ -12,22 +19,13 @@ const turn: TutorTurnRequest = {
   step: { kind: "praise", item: { question: "Ada berapa apel?", answers: ["3", "tiga"] }, childSaid: "tiga" },
 };
 
-const fakeClient = (reply: { stop_reason: string; text: string } | Error) =>
-  ({
-    beta: {
-      messages: {
-        create: async () => {
-          if (reply instanceof Error) throw reply;
-          return {
-            model: "claude-opus-5-5",
-            stop_reason: reply.stop_reason,
-            usage: { input_tokens: 10, cache_read_input_tokens: 0, output_tokens: 5 },
-            content: [{ type: "text", text: reply.text }],
-          };
-        },
-      },
-    },
-  }) as unknown as Anthropic;
+/** A model that replies with fixed text, or fails. */
+const fakeModel =
+  (reply: { complete: boolean; text: string } | Error): TutorModel =>
+  async () => {
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
 
 describe("filterSegments", () => {
   it("keeps short, safe Indonesian and English lines", () => {
@@ -60,32 +58,166 @@ describe("filterSegments", () => {
 
 describe("runTutorTurn", () => {
   it("returns the model's segments when they pass the filter", async () => {
-    const client = fakeClient({
-      stop_reason: "end_turn",
+    const model = fakeModel({
+      complete: true,
       text: JSON.stringify({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }] }),
     });
-    const result = await runTutorTurn(client, turn);
+    const result = await runTutorTurn(model, turn);
     expect(result).toEqual({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }], fallbackUsed: false });
   });
 
-  it("uses the prepared line on a refusal", async () => {
-    const result = await runTutorTurn(fakeClient({ stop_reason: "refusal", text: "" }), turn);
+  it("uses the prepared line when the reply is cut off", async () => {
+    const result = await runTutorTurn(fakeModel({ complete: false, text: "" }), turn);
     expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
   });
 
   it("uses the prepared line when the API call fails", async () => {
-    const result = await runTutorTurn(fakeClient(new Error("network")), turn);
+    const result = await runTutorTurn(fakeModel(new Error("network")), turn);
     expect(result.fallbackUsed).toBe(true);
   });
 
   it("uses the prepared line on malformed JSON", async () => {
-    const result = await runTutorTurn(fakeClient({ stop_reason: "end_turn", text: "{oops" }), turn);
+    const result = await runTutorTurn(fakeModel({ complete: true, text: "{oops" }), turn);
     expect(result.segments).toEqual(FALLBACK_LINES.praise);
   });
 });
 
+describe("openAiCompatibleModel", () => {
+  const reply = (body: unknown, status = 200) =>
+    (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+
+  it("sends a strict JSON-schema request and returns the segments", async () => {
+    let sent: { url: string; init: RequestInit } | undefined;
+    const fetchSpy = (async (url: string, init: RequestInit) => {
+      sent = { url, init };
+      return new Response(
+        JSON.stringify({
+          model: "openai/gpt-5-nano",
+          choices: [{ message: { content: JSON.stringify({ segments: [{ lang: "id", text: "Betul!" }] }) }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 100, completion_tokens: 10 },
+        }),
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await runTutorTurn(openAiCompatibleModel({ provider: "pollinations", apiKey: "sk_test", reasoningEffort: "low", fetch: fetchSpy }), turn);
+    expect(result).toEqual({ segments: [{ lang: "id", text: "Betul!" }], fallbackUsed: false });
+    expect(sent!.url).toBe("https://gen.pollinations.ai/v1/chat/completions");
+    expect((sent!.init.headers as Record<string, string>).authorization).toBe("Bearer sk_test");
+    const body = JSON.parse(String(sent!.init.body));
+    expect(body.model).toBe("openai/gpt-5-nano");
+    expect(body.reasoning_effort).toBe("low");
+    expect(body.response_format.json_schema.strict).toBe(true);
+  });
+
+  it("sends Sumopod requests to its own endpoint and model", async () => {
+    let sent: { url: string; body: { model: string } } | undefined;
+    const fetchSpy = (async (url: string, init: RequestInit) => {
+      sent = { url, body: JSON.parse(String(init.body)) };
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify({ segments: [{ lang: "id", text: "Hebat!" }] }) }, finish_reason: "stop" }] }),
+      );
+    }) as unknown as typeof fetch;
+    const result = await runTutorTurn(openAiCompatibleModel({ provider: "sumopod", apiKey: "sk-x", fetch: fetchSpy }), turn);
+    expect(result.fallbackUsed).toBe(false);
+    expect(sent!.url).toBe("https://ai.sumopod.com/v1/chat/completions");
+    expect(sent!.body.model).toBe("gpt-5-nano");
+  });
+
+  it("uses the prepared line when the reply is cut off or the call fails", async () => {
+    const cutOff = reply({ choices: [{ message: { content: "{\"segm" }, finish_reason: "length" }] });
+    expect((await runTutorTurn(openAiCompatibleModel({ provider: "pollinations", apiKey: "k", fetch: cutOff }), turn)).fallbackUsed).toBe(true);
+    const failed = reply({ error: "budget" }, 402);
+    expect((await runTutorTurn(openAiCompatibleModel({ provider: "sumopod", apiKey: "k", fetch: failed }), turn)).fallbackUsed).toBe(true);
+  });
+});
+
+describe("safety guard", () => {
+  const tutor: TutorModel = async () => ({
+    text: JSON.stringify({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }] }),
+    complete: true,
+  });
+  const guardReplying = (reply: { text: string; complete: boolean } | Error): TutorModel => async () => {
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
+
+  it("lets a line through when the guard says it is safe", async () => {
+    const result = await runTutorTurn(tutor, turn, safetyGuard(guardReplying({ text: '{"safe":true}', complete: true })));
+    expect(result).toEqual({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }], fallbackUsed: false });
+  });
+
+  it.each([
+    ["says unsafe", { text: '{"safe":false}', complete: true }],
+    ["is cut off", { text: '{"saf', complete: false }],
+    ["returns garbage", { text: "maybe", complete: true }],
+    ["fails", new Error("timeout")],
+  ])("uses the prepared line when the guard %s", async (_, reply) => {
+    const result = await runTutorTurn(tutor, turn, safetyGuard(guardReplying(reply)));
+    expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
+  });
+});
+
+describe("qwenGuardModel", () => {
+  const lines = [{ lang: "id" as const, text: "Hebat, Aya!" }];
+  const guardSaying = (content: string) =>
+    safetyGuard(
+      qwenGuardModel({
+        provider: "pollinations",
+        apiKey: "k",
+        model: "qwen/qwen3guard-gen-8b",
+        fetch: (async () =>
+          new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason: "stop" }] }))) as unknown as typeof fetch,
+      }),
+    );
+
+  it.each([
+    ["Safety: Safe\nCategories: None", true],
+    ["Safety: Unsafe\nCategories: Violent", false],
+    ["Safety: Controversial\nCategories: Politically Sensitive Topics", false],
+    ["I am not sure", false],
+  ])("reads %j as safe=%s", async (content, safe) => {
+    expect(await guardSaying(content)(lines)).toBe(safe);
+  });
+});
+
+describe("withFallback", () => {
+  const good: TutorModel = async () => ({
+    text: JSON.stringify({ segments: [{ lang: "id", text: "Dari cadangan!" }] }),
+    complete: true,
+  });
+
+  it.each([
+    ["errors", (async () => { throw new Error("sumopod 503"); }) as TutorModel],
+    ["is cut off", (async () => ({ text: "{", complete: false })) as TutorModel],
+  ])("uses the backup provider when the main one %s", async (_, primary) => {
+    const result = await runTutorTurn(withFallback(primary, good), turn);
+    expect(result).toEqual({ segments: [{ lang: "id", text: "Dari cadangan!" }], fallbackUsed: false });
+  });
+
+  it("uses the backup when the main safety model answers in the wrong format", async () => {
+    const tutor: TutorModel = async () => ({
+      text: JSON.stringify({ segments: [{ lang: "id", text: "Betul!" }] }),
+      complete: true,
+    });
+    const chatty: TutorModel = async () => ({ text: "Looks safe to me", complete: true });
+    const backup: TutorModel = async () => ({ text: '```json\n{"safe": true}\n```', complete: true });
+    const result = await runTutorTurn(tutor, turn, safetyGuard(withFallback(chatty, backup, isSafetyReply)));
+    expect(result.fallbackUsed).toBe(false);
+  });
+
+  it("does not call the backup when the main one works", async () => {
+    let backupCalls = 0;
+    const backup: TutorModel = async () => {
+      backupCalls += 1;
+      return good("", "");
+    };
+    await runTutorTurn(withFallback(good, backup), turn);
+    expect(backupCalls).toBe(0);
+  });
+});
+
 describe("routes", () => {
-  const env = { ANTHROPIC_API_KEY: "k", GOOGLE_CLOUD_API_KEY: "g", APP_TOKEN: "secret" };
+  const env = { SUMOPOD_API_KEY: "k", GOOGLE_CLOUD_API_KEY: "g", APP_TOKEN: "secret" };
 
   it("serves health without a token", async () => {
     const response = await app.request("/health", {}, env);

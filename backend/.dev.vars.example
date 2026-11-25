@@ -1,4 +1,21 @@
-ANTHROPIC_API_KEY=
+# Which LLM service writes Kak Pinta's lines: sumopod (set in wrangler.jsonc) or pollinations
+TUTOR_PROVIDER=sumopod
+# Secret key (sk_...) from enter.pollinations.ai
+POLLINATIONS_API_KEY=
+# API key (sk-...) from ai.sumopod.com, used when TUTOR_PROVIDER=sumopod
+SUMOPOD_API_KEY=
+# Optional: model id at that provider (default GPT-5 Nano) and reasoning effort
+TUTOR_MODEL=hy4-flash
+TUTOR_REASONING_EFFORT=low
+# Optional: a second model that checks every line before the child hears it.
+# Leave empty to turn the check off. Provider defaults to the tutor's provider.
+SAFETY_MODEL=jev-1.14.0
+SAFETY_PROVIDER=sumopod
+# Optional backups when the main provider fails or is slow (sumopod or pollinations)
+TUTOR_FALLBACK_PROVIDER=pollinations
+TUTOR_FALLBACK_MODEL=openai/gpt-5-nano
+SAFETY_FALLBACK_PROVIDER=pollinations
+SAFETY_FALLBACK_MODEL=qwen/qwen3guard-gen-8b
 GOOGLE_CLOUD_API_KEY=
 APP_TOKEN=
 # Optional: a specific Google voice name per language

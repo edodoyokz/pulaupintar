@@ -36,6 +36,15 @@ describe("grading", () => {
     expect(isCorrectAnswer("red blue yellow", ["red"], ["red", "blue", "yellow"])).toBe(false);
   });
 
+  it("reads numbers only in the lesson's language", () => {
+    expect(isCorrectAnswer("three", ["3"], [], "en")).toBe(true);
+    expect(isCorrectAnswer("tiga", ["3"], [], "en")).toBe(false);
+    expect(isCorrectAnswer("em", ["m", "em"])).toBe(true);
+    expect(isCorrectAnswer("em, be", ["b", "be"], ["m", "em", "b", "be"])).toBe(true);
+    expect(isCorrectAnswer("Kak", ["k", "ka", "kak"], ["k", "ka", "kak", "b", "be"])).toBe(true);
+    expect(isCorrectAnswer("kak tiga", ["3"])).toBe(true);
+  });
+
   it("takes the last number when a child counts aloud", () => {
     expect(isCorrectAnswer("satu dua tiga empat", ["2"])).toBe(false);
     expect(isCorrectAnswer("satu dua tiga, tiga!", ["3"])).toBe(true);
@@ -52,13 +61,15 @@ describe("every built lesson", () => {
   );
 
   it("accepts each item's own answer and rejects the other answers in the lesson", () => {
-    expect(lessons.length).toBeGreaterThanOrEqual(7);
+    expect(lessons).toHaveLength(15);
     for (const lesson of lessons) {
       const lessonAnswers = lesson.pool.flatMap((item) => item.answers);
       for (const item of lesson.pool) {
-        expect(isCorrectAnswer(item.answers[0], item.answers, lessonAnswers), `${lesson.id} ${item.answers[0]}`).toBe(true);
+        for (const answer of item.answers) {
+          expect(isCorrectAnswer(answer, item.answers, lessonAnswers, lesson.answerLang), `${lesson.id} ${answer}`).toBe(true);
+        }
         for (const other of lessonAnswers.filter((answer) => !item.answers.includes(answer))) {
-          expect(isCorrectAnswer(other, item.answers, lessonAnswers), `${lesson.id} ${other}`).toBe(false);
+          expect(isCorrectAnswer(other, item.answers, lessonAnswers, lesson.answerLang), `${lesson.id} ${other}`).toBe(false);
         }
       }
     }
@@ -108,7 +119,17 @@ describe("level progression", () => {
   });
 
   it("keeps levels that are not built yet locked", () => {
-    expect(isUnlocked("membaca", 2, ["membaca-1"])).toBe(false);
+    expect(isUnlocked("membaca", 6, ["membaca-5"])).toBe(false);
+  });
+
+  it("builds all five levels of every subject", () => {
+    for (const subject of ["berhitung", "membaca", "inggris"] as const) {
+      for (let level = 1; level <= LEVELS_PER_SUBJECT; level += 1) {
+        const lesson = findLesson(subject, level);
+        expect(lesson, `${subject}-${level}`).toBeDefined();
+        expect(lesson!.pool.length).toBeGreaterThanOrEqual(SESSION_SIZE);
+      }
+    }
   });
 
   it("passes at 80% and awards stars", () => {

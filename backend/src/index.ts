@@ -1,11 +1,72 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
-import { runTutorTurn } from "./tutor";
+import {
+  openAiCompatibleModel,
+  isSafetyReply,
+  isTutorReply,
+  qwenGuardModel,
+  runTutorTurn,
+  SAFETY_CALL_TIMEOUT_MS,
+  SAFETY_OUTPUT_SCHEMA,
+  safetyGuard,
+  withFallback,
+  type OpenAiCompatibleProvider,
+  type SafetyGuard,
+  type TutorModel,
+} from "./tutor";
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
+
+const apiKeyFor = (env: Env, provider: OpenAiCompatibleProvider) =>
+  (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
+
+const tutorBackup = (env: Env): TutorModel | undefined => {
+  const provider = env.TUTOR_FALLBACK_PROVIDER;
+  if (!provider) return undefined;
+  return openAiCompatibleModel({
+    provider,
+    apiKey: apiKeyFor(env, provider),
+    model: env.TUTOR_FALLBACK_MODEL,
+    reasoningEffort: env.TUTOR_REASONING_EFFORT,
+  });
+};
+
+const tutorModelFor = (env: Env): TutorModel => {
+  const backup = tutorBackup(env);
+  const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
+  const primary = openAiCompatibleModel({
+    provider,
+    apiKey: apiKeyFor(env, provider),
+    model: env.TUTOR_MODEL,
+    reasoningEffort: env.TUTOR_REASONING_EFFORT,
+  });
+  return withFallback(primary, backup, isTutorReply);
+};
+
+/** Backup safety checker; a Qwen3Guard model is called in its own classifier format. */
+const safetyBackup = (env: Env): TutorModel | undefined => {
+  const provider = env.SAFETY_FALLBACK_PROVIDER;
+  const model = env.SAFETY_FALLBACK_MODEL;
+  if (!provider) return undefined;
+  const apiKey = apiKeyFor(env, provider);
+  if (model?.toLowerCase().includes("qwen3guard")) return qwenGuardModel({ provider, apiKey, model });
+  return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs: SAFETY_CALL_TIMEOUT_MS });
+};
+
+const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
+  if (!env.SAFETY_MODEL) return undefined;
+  const provider = env.SAFETY_PROVIDER ?? (env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations");
+  const primary = openAiCompatibleModel({
+    provider,
+    apiKey: apiKeyFor(env, provider),
+    model: env.SAFETY_MODEL,
+    schema: SAFETY_OUTPUT_SCHEMA,
+    timeoutMs: SAFETY_CALL_TIMEOUT_MS,
+  });
+  return safetyGuard(withFallback(primary, safetyBackup(env), isSafetyReply));
+};
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -21,8 +82,7 @@ app.use("/v1/*", async (c, next) => {
 
 app.post("/v1/tutor/turn", async (c) => {
   const request = await c.req.json<TutorTurnRequest>();
-  const client = new Anthropic({ apiKey: c.env.ANTHROPIC_API_KEY });
-  return c.json(await runTutorTurn(client, request));
+  return c.json(await runTutorTurn(tutorModelFor(c.env), request, safetyGuardFor(c.env)));
 });
 
 app.post("/v1/tts", async (c) => {

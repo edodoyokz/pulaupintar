@@ -90,6 +90,46 @@ const letter = (value: string): AppItem => ({
   picture: { kind: "text", text: value.toUpperCase() },
 });
 
+// Letter names as Indonesian children say them, so speech-to-text can return either form.
+const LETTER_NAMES: Record<string, string> = { b: "be", d: "de", k: "ka", m: "em", p: "pe", s: "es", t: "te" };
+
+// Speech-to-text often hears the letter name "ka" as the common word "kak".
+const SOUNDS_LIKE: Record<string, string[]> = { k: ["kak"] };
+
+const consonant = (value: string): AppItem => ({
+  question: "Huruf apa ini?",
+  answers: [value, LETTER_NAMES[value], ...(SOUNDS_LIKE[value] ?? [])],
+  visual: `huruf ${value.toUpperCase()}`,
+  picture: { kind: "text", text: value.toUpperCase() },
+});
+
+const reading = (text: string, what: "suku kata" | "kata" | "kalimat"): AppItem => ({
+  question: `Coba baca ${what} ini.`,
+  answers: [text],
+  visual: `tulisan "${text}"`,
+  picture: { kind: "text", text },
+});
+
+/** Kak Pinta says the Indonesian word; the card shows it too, for a parent reading along. */
+const translate = (indonesian: string, answers: string[], topic: string): AppItem => ({
+  question: `Apa Bahasa Inggrisnya ${indonesian}?`,
+  answers,
+  visual: `${topic}: ${indonesian}`,
+  picture: { kind: "text", text: indonesian },
+});
+
+const ENGLISH_NUMBER: Record<number, string> = {
+  1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+};
+
+// The English word comes first so the tutor says "three", not a digit Indonesian TTS would read as "tiga".
+const englishNumber = (n: number): AppItem => ({
+  question: `Apa Bahasa Inggrisnya angka ${NUMBER_WORD[n]}?`,
+  answers: [ENGLISH_NUMBER[n], String(n)],
+  visual: `angka ${n}`,
+  picture: { kind: "text", text: String(n) },
+});
+
 const color = (indonesian: string, english: string, hex: string): AppItem => ({
   question: `Apa Bahasa Inggrisnya ${indonesian}?`,
   answers: [english],
@@ -148,36 +188,109 @@ const BERHITUNG_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
   },
 ];
 
-const MEMBACA_LEVEL_1: Omit<Lesson, "id" | "subject" | "level"> = {
-  title: "Mengenal huruf vokal",
-  goal: "Anak bisa menyebut huruf vokal a, i, u, e, o.",
-  answerLang: "id",
-  sticker: { name: "Huruf Ceria", object: "star" },
-  pool: ["a", "i", "u", "e", "o"].map(letter),
-};
+const MEMBACA_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
+  {
+    title: "Mengenal huruf vokal",
+    goal: "Anak bisa menyebut huruf vokal a, i, u, e, o.",
+    answerLang: "id",
+    sticker: { name: "Huruf Ceria", object: "star" },
+    pool: ["a", "i", "u", "e", "o"].map(letter),
+  },
+  {
+    title: "Huruf konsonan dan bunyinya",
+    goal: "Anak bisa menyebut huruf b, d, k, m, p, s, t.",
+    answerLang: "id",
+    sticker: { name: "Teman Huruf", object: "ball" },
+    pool: ["b", "d", "k", "m", "p", "s", "t"].map(consonant),
+  },
+  {
+    title: "Suku kata terbuka",
+    goal: "Anak bisa membaca suku kata seperti ba, bi, bu, ma, mi.",
+    answerLang: "id",
+    sticker: { name: "Suku Kata Seru", object: "fish" },
+    pool: ["ba", "bi", "bu", "ma", "mi", "mu", "sa", "pa"].map((text) => reading(text, "suku kata")),
+  },
+  {
+    title: "Kata dua suku kata",
+    goal: "Anak bisa membaca kata pendek seperti bola, buku, mama.",
+    answerLang: "id",
+    sticker: { name: "Kutu Buku", object: "apple" },
+    pool: ["bola", "buku", "mama", "papa", "sapu", "kaki", "roti", "topi"].map((text) => reading(text, "kata")),
+  },
+  {
+    title: "Kalimat pendek",
+    goal: "Anak bisa membaca kalimat dua kata.",
+    answerLang: "id",
+    sticker: { name: "Jago Baca", object: "star" },
+    pool: ["ini bola", "aku suka", "ibu masak", "adik tidur", "bapak baca", "kakak lari"].map((text) =>
+      reading(text, "kalimat"),
+    ),
+  },
+];
 
-const INGGRIS_LEVEL_1: Omit<Lesson, "id" | "subject" | "level"> = {
-  title: "Warna dalam Bahasa Inggris",
-  goal: "Anak bisa menyebut warna dasar dalam Bahasa Inggris.",
-  answerLang: "en",
-  sticker: { name: "Pelangi Kecil", object: "ball" },
-  pool: [
-    color("merah", "red", "#E8483B"), color("biru", "blue", "#4DA3E8"), color("kuning", "yellow", "#FFC83D"),
-    color("hijau", "green", "#3DBE7A"), color("oranye", "orange", "#F08A24"),
-  ],
-};
+const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
+  {
+    title: "Warna dalam Bahasa Inggris",
+    goal: "Anak bisa menyebut warna dasar dalam Bahasa Inggris.",
+    answerLang: "en",
+    sticker: { name: "Pelangi Kecil", object: "ball" },
+    pool: [
+      color("merah", "red", "#E8483B"), color("biru", "blue", "#4DA3E8"), color("kuning", "yellow", "#FFC83D"),
+      color("hijau", "green", "#3DBE7A"), color("oranye", "orange", "#F08A24"),
+    ],
+  },
+  {
+    title: "Hewan di sekitar",
+    goal: "Anak bisa menyebut nama hewan dalam Bahasa Inggris.",
+    answerLang: "en",
+    sticker: { name: "Sahabat Hewan", object: "fish" },
+    pool: [
+      translate("kucing", ["cat"], "hewan"), translate("anjing", ["dog"], "hewan"), translate("burung", ["bird"], "hewan"),
+      translate("ikan", ["fish"], "hewan"), translate("sapi", ["cow"], "hewan"), translate("bebek", ["duck"], "hewan"),
+    ],
+  },
+  {
+    title: "Anggota tubuh",
+    goal: "Anak bisa menyebut anggota tubuh dalam Bahasa Inggris.",
+    answerLang: "en",
+    sticker: { name: "Tubuh Sehat", object: "apple" },
+    pool: [
+      translate("mata", ["eye", "eyes"], "anggota tubuh"), translate("hidung", ["nose", "noses"], "anggota tubuh"),
+      translate("mulut", ["mouth", "mouths"], "anggota tubuh"), translate("tangan", ["hand", "hands"], "anggota tubuh"),
+      translate("kaki", ["foot", "feet", "leg", "legs"], "anggota tubuh"), translate("telinga", ["ear", "ears"], "anggota tubuh"),
+    ],
+  },
+  {
+    title: "Angka 1 sampai 10",
+    goal: "Anak bisa menyebut angka 1 sampai 10 dalam Bahasa Inggris.",
+    answerLang: "en",
+    sticker: { name: "Number Star", object: "star" },
+    pool: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(englishNumber),
+  },
+  {
+    title: "Salam dan kalimat sederhana",
+    goal: "Anak bisa mengucapkan salam sederhana dalam Bahasa Inggris.",
+    answerLang: "en",
+    sticker: { name: "Ramah Sekali", object: "ball" },
+    pool: [
+      translate("halo", ["hello", "hi"], "salam"), translate("selamat pagi", ["good morning"], "salam"),
+      translate("terima kasih", ["thank you", "thanks", "thankyou"], "salam"), translate("selamat tinggal", ["goodbye", "good bye", "bye"], "salam"),
+      translate("selamat malam", ["good night", "goodnight"], "salam"),
+    ],
+  },
+];
 
 /** Titles of every planned level, so locked levels can show what is coming. */
 export const LEVEL_TITLES: Record<Subject, string[]> = {
   berhitung: BERHITUNG_LEVELS.map((level) => level.title),
-  membaca: ["Mengenal huruf vokal", "Huruf konsonan dan bunyinya", "Suku kata terbuka", "Kata dua suku kata", "Kalimat pendek"],
-  inggris: ["Warna dasar", "Hewan di sekitar", "Anggota tubuh", "Angka 1 sampai 10", "Salam dan kalimat sederhana"],
+  membaca: MEMBACA_LEVELS.map((level) => level.title),
+  inggris: INGGRIS_LEVELS.map((level) => level.title),
 };
 
 const BUILT: Record<Subject, Omit<Lesson, "id" | "subject" | "level">[]> = {
   berhitung: BERHITUNG_LEVELS,
-  membaca: [MEMBACA_LEVEL_1],
-  inggris: [INGGRIS_LEVEL_1],
+  membaca: MEMBACA_LEVELS,
+  inggris: INGGRIS_LEVELS,
 };
 
 export const lessonId = (subject: Subject, level: number) => `${subject}-${level}`;
