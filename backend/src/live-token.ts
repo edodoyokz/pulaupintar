@@ -47,7 +47,7 @@ export const createLiveToken = async (env: Env, role: LiveRole, doFetch: typeof 
     headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY ?? "" },
     body: JSON.stringify({
       uses: 1,
-      expireTime: plus(role === "speak" ? 30 : 5),
+      expireTime: plus(role === "speak" ? 10 : 5),
       newSessionExpireTime: plus(2),
       bidiGenerateContentSetup: setup,
     }),

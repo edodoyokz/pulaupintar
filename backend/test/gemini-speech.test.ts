@@ -58,6 +58,28 @@ describe("synthesizeWithGemini", () => {
     expect(sent[0].setup.generationConfig.speechConfig.languageCode).toBe("en-US");
   });
 
+  it("rejects a socket that closes before the line is finished, even after some audio", async () => {
+    const socket = async (): Promise<LiveSocket> => {
+      const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
+      const emit = (type: string, data?: unknown) => listeners[type]?.forEach((listener) => listener({ data }));
+      return {
+        addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
+        close: () => undefined,
+        send: (data) => {
+          const message = JSON.parse(data);
+          if (message.setup) queueMicrotask(() => emit("message", JSON.stringify({ setupComplete: {} })));
+          if (message.realtimeInput) {
+            queueMicrotask(() => {
+              emit("message", JSON.stringify({ serverContent: { modelTurn: { parts: [{ inlineData: { data: b64([1, 2]) } }] } } }));
+              emit("close");
+            });
+          }
+        },
+      };
+    };
+    await expect(synthesizeWithGemini(env, [{ lang: "id", text: "Halo" }], socket)).rejects.toThrow("closed before");
+  });
+
   it("fails when Live sends no audio, so the app falls back to the device voice", async () => {
     await expect(synthesizeWithGemini(env, [{ lang: "id", text: "Halo" }], fakeLive([], []))).rejects.toThrow("no audio");
   });

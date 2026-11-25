@@ -21,6 +21,8 @@ export class LiveListener {
   private waiting: string[] = [];
   private finalText = "";
   private interimText = "";
+  /** Set when the socket closes. A close before any transcript is a failure, not a wrong answer. */
+  private closed = false;
   private onTranscript: (() => void) | null = null;
 
   static async requestPermission(): Promise<boolean> {
@@ -31,11 +33,15 @@ export class LiveListener {
   async start() {
     this.finalText = "";
     this.interimText = "";
+    this.closed = false;
     this.waiting = [];
     this.live = null;
     const opening = openLiveConnection("listen", {
       onMessage: (message) => this.handle(message),
-      onClose: () => this.onTranscript?.(),
+      onClose: () => {
+        this.closed = true;
+        this.onTranscript?.();
+      },
     });
     this.opening = opening;
     opening.then(
@@ -58,7 +64,7 @@ export class LiveListener {
     if (started.status === "error") throw new Error("could not start the microphone");
   }
 
-  /** Stops recording and returns what the child said. Throws if there is no transcript to be had, so a failure never counts as a wrong answer. */
+  /** Stops recording and returns what the child said. Throws if the session failed or closed before any transcript, so a failure never counts as a wrong answer; an open session that hears nothing returns an empty string, like a silent child. */
   async stopAndTranscribe(): Promise<string> {
     await this.stopRecorder();
     const connection = await this.opening;
@@ -74,7 +80,9 @@ export class LiveListener {
     this.onTranscript = null;
     connection.close();
     this.live = null;
-    return (this.finalText || this.interimText).trim();
+    const text = (this.finalText || this.interimText).trim();
+    if (text === "" && this.closed) throw new Error("live session closed before a transcript");
+    return text;
   }
 
   async cancel() {

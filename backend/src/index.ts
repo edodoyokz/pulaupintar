@@ -110,6 +110,10 @@ app.post("/v1/stt", async (c) => {
   if (!request.audioBase64 || request.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
     return c.json({ error: "audio missing or too long" }, 400);
   }
+  if (c.env.SPEECH_PROVIDER === "gemini" && request.encoding === "AMR_WB") {
+    // Gemini's transcription models don't list AMR-WB; the app records AAC for them.
+    return c.json({ error: "AMR_WB is not supported with SPEECH_PROVIDER=gemini; record AAC" }, 400);
+  }
   const transcript = c.env.SPEECH_PROVIDER === "gemini" ? await transcribeWithGemini(c.env, request) : await transcribe(c.env, request);
   return c.json({ transcript });
 });
