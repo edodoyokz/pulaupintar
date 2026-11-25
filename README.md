@@ -35,6 +35,7 @@ cd app
 npm install
 cp .env.example .env    # isi EXPO_PUBLIC_API_URL dan EXPO_PUBLIC_APP_TOKEN
 npx expo start
+npm test        # kurikulum, penilaian jawaban, dan progres level
 ```
 
 Mikrofon dan pemutar audio memakai `expo-audio`, jadi coba di HP Android dengan Expo Go atau development build (`npx expo run:android`). Jika suara cloud gagal, tutor otomatis memakai suara bawaan HP.

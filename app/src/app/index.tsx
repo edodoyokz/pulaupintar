@@ -8,7 +8,7 @@ const Index = () => {
   if (!ready) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.sky }}>
-        <ActivityIndicator size="large" color={colors.sea} />
+        <ActivityIndicator size="large" color={colors.blue} />
       </View>
     );
   }
