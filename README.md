@@ -27,7 +27,7 @@ npm test
 - Aplikasi memakai modul audio native (`react-native-audio-api`), jadi butuh development build, bukan Expo Go. Expo sendiri tidak menyediakan pemutaran PCM mentah yang di-stream, makanya library ini dipakai untuk suara dan mikrofon. Tanpa itu (atau dengan `EXPO_PUBLIC_VOICE=rest`) aplikasi memakai `/v1/tts` dan `/v1/stt` yang juga Gemini.
 - Untuk kembali ke Google Cloud TTS/STT: set `SPEECH_PROVIDER=google`, isi `GOOGLE_CLOUD_API_KEY` (Cloud Text-to-Speech dan Speech-to-Text API aktif), dan `EXPO_PUBLIC_VOICE=rest` serta `EXPO_PUBLIC_SPEECH=google` di aplikasi (Android lalu merekam AMR-WB, bukan AAC).
 - **Penting:** Ketentuan Gemini API melarang aplikasi yang ditujukan atau kemungkinan dipakai anak di bawah 18 tahun, dan di tier gratis data dipakai Google untuk meningkatkan produknya (peninjau manusia bisa membacanya). Pakai kunci dari proyek berbayar, dan periksa ketentuan sebelum dipakai anak lain.
-- `APP_TOKEN` adalah kata sandi bersama antara aplikasi dan backend, supaya orang lain tidak bisa memakai API key.
+- `APP_TOKEN` hanya gerbang ringan antara aplikasi dan backend. Token ini ikut terpasang di dalam APK, jadi siapa pun yang membongkar APK bisa membacanya. Perlindungan yang sebenarnya adalah batas per IP (`TURN_LIMITER` 30/menit, `SPEECH_LIMITER` 40/menit, `LIVE_LIMITER` 30/menit, di `backend/wrangler.jsonc`), batas ukuran body dan isi kolom, serta pemeriksaan keamanan kalimat. Tanpa `SAFETY_MODEL`, backend tidak mengucapkan kalimat dari model, hanya kalimat cadangan.
 - Deploy: `npx wrangler secret put SUMOPOD_API_KEY` (dan seterusnya), lalu `npm run deploy`.
 - Setiap panggilan AI mencatat log `{"event":"cost", ...}` untuk menghitung biaya per sesi (dasar harga langganan nanti).
 

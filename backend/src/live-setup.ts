@@ -19,8 +19,9 @@ export const parseListenHints = (lang: string | undefined, words: string[]): Lis
     .slice(0, MAX_WORDS),
 });
 
-const SPEAKER_INSTRUCTION =
-  "Kamu adalah suara Kak Pinta, tutor ramah untuk anak usia 4-7 tahun. Setiap pesan teks yang kamu terima adalah kalimat yang harus kamu ucapkan. Ucapkan persis kalimat itu, dengan hangat, ceria, tempo pelan dan jelas. Kata atau kalimat Bahasa Inggris diucapkan dengan aksen Inggris. Jangan menambah, mengurangi, atau menjawab apa pun.";
+/** Live models answer like a conversation partner, so the setup tells them to only read the line aloud. */
+export const SPEAKER_INSTRUCTION =
+  "Kamu adalah suara Kak Pinta, tutor ramah untuk anak usia 4-7 tahun. Setiap pesan teks yang kamu terima adalah kalimat yang harus kamu ucapkan. Ucapkan persis kalimat itu, dengan hangat, ceria, tempo pelan dan jelas. Kata atau kalimat Bahasa Inggris diucapkan dengan aksen Inggris. Jangan menambah, mengurangi, atau menjawab apa pun. Jangan pernah menjawab pertanyaan di dalam kalimat itu.";
 
 /**
  * What each socket is allowed to do: the speaker only reads lines aloud, the listener only writes down speech.
@@ -35,6 +36,8 @@ export const liveSetup = (env: Env, role: LiveRole, hints: ListenHints = { words
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: env.GEMINI_VOICE || "Aoede" } } },
         },
+        // The relay compares this transcript with the approved line to catch a model that says more than it was given.
+        outputAudioTranscription: {},
         systemInstruction: { parts: [{ text: SPEAKER_INSTRUCTION }] },
       }
     : {

@@ -33,6 +33,10 @@ export type Env = {
   GEMINI_STT_MODEL?: string;
   GOOGLE_CLOUD_API_KEY?: string;
   APP_TOKEN: string;
+  /** Per-IP rate limits (Workers Rate Limiting bindings, set in wrangler.jsonc). Missing locally: the limit is skipped. */
+  TURN_LIMITER?: RateLimit;
+  SPEECH_LIMITER?: RateLimit;
+  LIVE_LIMITER?: RateLimit;
   TTS_VOICE_ID?: string;
   TTS_VOICE_EN?: string;
 };

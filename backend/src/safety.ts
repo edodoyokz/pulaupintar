@@ -6,7 +6,9 @@ const MAX_TOTAL_CHARS = 400;
 
 const URL_PATTERN = /(https?:\/\/|www\.|\.com\b|\.id\b)/i;
 const CONTACT_PATTERN = /(@|\b\d{6,}\b|whatsapp|instagram|tiktok|alamat|nomor telepon|password)/i;
-const BLOCKED_WORDS = /\b(bodoh|goblok|tolol|bego|mati|bunuh|darah|seks|stupid|kill|dumb)\b/i;
+// Indonesian stems also match with common prefixes and suffixes (membunuh, kematian, berdarah, dibunuh).
+const BLOCKED_WORDS =
+  /\b(?:(?:me|mem|men|ber|ter|di|ke|pe|pem)?(?:bunuh|mati|darah)(?:kan|an|nya|i)?|bodoh|goblok|tolol|bego|seks|stupid|kill|dumb)\b/i;
 
 export const FALLBACK_LINES: Record<TutorStepKind, SpeechSegment[]> = {
   teach: [{ lang: "id", text: "Ayo kita belajar bersama! Dengarkan baik-baik, ya." }],
@@ -16,6 +18,12 @@ export const FALLBACK_LINES: Record<TutorStepKind, SpeechSegment[]> = {
   reveal: [{ lang: "id", text: "Tidak apa-apa. Ayo kita lihat jawabannya bersama." }],
   wrapup: [{ lang: "id", text: "Kerja bagus hari ini! Kamu dapat bintang!" }],
 };
+
+const isSpeechSegment = (value: unknown): value is SpeechSegment =>
+  typeof value === "object" &&
+  value !== null &&
+  ((value as SpeechSegment).lang === "id" || (value as SpeechSegment).lang === "en") &&
+  typeof (value as SpeechSegment).text === "string";
 
 const isSafeText = (text: string): boolean =>
   !URL_PATTERN.test(text) && !CONTACT_PATTERN.test(text) && !BLOCKED_WORDS.test(text);
@@ -29,6 +37,8 @@ export const filterSegments = (
   segments: SpeechSegment[],
   kind: TutorStepKind,
 ): { segments: SpeechSegment[]; passed: boolean } => {
+  // A segment with an unknown language or without text is as untrustworthy as unsafe text: the whole turn falls back.
+  if (!Array.isArray(segments) || !segments.every(isSpeechSegment)) return { segments: FALLBACK_LINES[kind], passed: false };
   const cleaned = segments
     .map((segment) => ({ lang: segment.lang, text: segment.text.trim() }))
     .filter((segment) => segment.text.length > 0);
@@ -45,12 +55,6 @@ export const filterSegments = (
   }
   return { segments: FALLBACK_LINES[kind], passed: false };
 };
-
-const isSpeechSegment = (value: unknown): value is SpeechSegment =>
-  typeof value === "object" &&
-  value !== null &&
-  ((value as SpeechSegment).lang === "id" || (value as SpeechSegment).lang === "en") &&
-  typeof (value as SpeechSegment).text === "string";
 
 /**
  * Checks text sent to /v1/tts before it costs money or is spoken as Kak Pinta.

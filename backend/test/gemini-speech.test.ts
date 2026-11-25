@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { pcmToWav, synthesizeWithGemini, transcribeWithGemini, type LiveSocket } from "../src/gemini-speech";
 import type { Env, SttRequest } from "../src/types";
 
@@ -50,6 +50,29 @@ describe("synthesizeWithGemini", () => {
     expect(sent[0].setup.model).toBe("models/gemini-3.8-live");
     expect(sent[0].setup.generationConfig.speechConfig.languageCode).toBe("id-ID");
     expect(sent[1]).toEqual({ realtimeInput: { text: "Halo adik" } });
+  });
+
+  it("logs the cost of a line once, even when the socket's close event follows", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const connect = fakeLive([], [[1, 2]]);
+      const closing = async (): Promise<LiveSocket> => {
+        const socket = await connect();
+        let listeners: ((event: { data?: unknown }) => void)[] = [];
+        const add = socket.addEventListener;
+        socket.addEventListener = (type, listener) => {
+          if (type === "close") listeners.push(listener);
+          else add(type, listener);
+        };
+        socket.close = () => listeners.forEach((listener) => listener({}));
+        return socket;
+      };
+      await synthesizeWithGemini(env, [{ lang: "id", text: "Halo adik" }], closing);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(log.mock.calls.filter(([line]) => String(line).includes('"event":"cost"'))).toHaveLength(1);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("uses English for English segments", async () => {

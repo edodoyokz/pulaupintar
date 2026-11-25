@@ -23,5 +23,12 @@
     "TUTOR_FALLBACK_MODEL": "claude-haiku-5-5",
     "SAFETY_FALLBACK_PROVIDER": "sumopod",
     "SAFETY_FALLBACK_MODEL": "claude-haiku-5-5"
-  }
+  },
+  // Per-IP limits per minute (Workers Rate Limiting). One child does about 3 turns a minute; a school class
+  // shares one IP, so the limits leave room for about 40 children while still stopping a single abuser.
+  "ratelimits": [
+    { "name": "TURN_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "SPEECH_LIMITER", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } },
+    { "name": "LIVE_LIMITER", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } }
+  ]
 }

@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
 import { runLiveRelay, type RelaySocket } from "./live-relay";
@@ -24,6 +24,11 @@ import {
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
+const MAX_JSON_BODY_BYTES = 8 * 1024;
+const MAX_AUDIO_BODY_BYTES = 2 * 1024 * 1024;
+const VALID_STT_ENCODINGS = new Set<string>(["AMR_WB", "LINEAR16", "AAC"]);
+const MAX_HINTS = 50;
+const MAX_HINT_CHARS = 40;
 const VALID_SUBJECTS = new Set(["berhitung", "membaca", "inggris"]);
 const VALID_STEP_KINDS = new Set(["teach", "ask", "praise", "hint", "reveal", "wrapup"]);
 
@@ -48,21 +53,24 @@ export const validateTutorTurnRequest = (body: unknown): TutorTurnRequest | null
   if (typeof subject !== "string" || !VALID_SUBJECTS.has(subject)) return null;
   if (!isRecord(lesson) || typeof lesson.title !== "string" || typeof lesson.goal !== "string") return null;
   if (lesson.title.trim().length === 0 || lesson.goal.trim().length === 0) return null;
+  if (lesson.title.length > 120 || lesson.goal.length > 120) return null;
   if (!isRecord(step) || typeof step.kind !== "string" || !VALID_STEP_KINDS.has(step.kind)) return null;
 
   let validItem: TutorTurnRequest["step"]["item"];
   if (step.item !== undefined) {
     if (!isRecord(step.item) || typeof step.item.question !== "string" || !Array.isArray(step.item.answers)) return null;
-    if (step.item.answers.length === 0 || !step.item.answers.every((answer) => typeof answer === "string")) return null;
-    if (step.item.visual !== undefined && typeof step.item.visual !== "string") return null;
+    if (step.item.question.length > 200) return null;
+    if (step.item.answers.length === 0 || step.item.answers.length > 20) return null;
+    if (!step.item.answers.every((answer) => typeof answer === "string" && answer.length <= 40)) return null;
+    if (step.item.visual !== undefined && (typeof step.item.visual !== "string" || step.item.visual.length > 200)) return null;
     validItem = {
       question: step.item.question,
       answers: step.item.answers,
       ...(step.item.visual !== undefined ? { visual: step.item.visual } : {}),
     };
   }
-  if (step.childSaid !== undefined && typeof step.childSaid !== "string") return null;
-  if (step.attempt !== undefined && (typeof step.attempt !== "number" || !Number.isFinite(step.attempt))) return null;
+  if (step.childSaid !== undefined && (typeof step.childSaid !== "string" || step.childSaid.length > 200)) return null;
+  if (step.attempt !== undefined && (typeof step.attempt !== "number" || !Number.isInteger(step.attempt) || step.attempt < 1 || step.attempt > 10)) return null;
 
   return {
     child: { name, age: child.age },
@@ -74,6 +82,26 @@ export const validateTutorTurnRequest = (body: unknown): TutorTurnRequest | null
       ...(step.childSaid !== undefined ? { childSaid: step.childSaid } : {}),
       ...(step.attempt !== undefined ? { attempt: step.attempt } : {}),
     },
+  };
+};
+
+export const validateSttRequest = (body: unknown): SttRequest | null => {
+  if (!isRecord(body)) return null;
+  const { audioBase64, encoding, sampleRateHertz, expect, hints } = body;
+  if (typeof audioBase64 !== "string" || audioBase64.length === 0 || audioBase64.length > MAX_AUDIO_BASE64_CHARS) return null;
+  if (typeof encoding !== "string" || !VALID_STT_ENCODINGS.has(encoding)) return null;
+  if (typeof sampleRateHertz !== "number" || !Number.isInteger(sampleRateHertz) || sampleRateHertz <= 0) return null;
+  if (expect !== "id" && expect !== "en") return null;
+  if (hints !== undefined) {
+    if (!Array.isArray(hints) || hints.length > MAX_HINTS) return null;
+    if (!hints.every((hint) => typeof hint === "string" && hint.length <= MAX_HINT_CHARS)) return null;
+  }
+  return {
+    audioBase64,
+    encoding: encoding as SttRequest["encoding"],
+    sampleRateHertz,
+    expect,
+    ...(hints !== undefined ? { hints: hints as string[] } : {}),
   };
 };
 
@@ -115,8 +143,14 @@ const safetyChecker = (env: Env, provider: OpenAiCompatibleProvider, model: stri
   return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs });
 };
 
-const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
-  if (!env.SAFETY_MODEL) return undefined;
+/** Without a safety model nothing may be spoken from the tutor: the guard blocks every line, so children hear the prepared lines. */
+export const safetyGuardFor = (env: Env): SafetyGuard => {
+  if (!env.SAFETY_MODEL) {
+    return async () => {
+      console.error(JSON.stringify({ event: "safety_unconfigured" }));
+      return false;
+    };
+  }
   const primary = safetyChecker(env, providerOrDefault(env, env.SAFETY_PROVIDER), env.SAFETY_MODEL, SAFETY_CALL_TIMEOUT_MS);
   const backupProvider = env.SAFETY_FALLBACK_PROVIDER;
   const backup = backupProvider
@@ -136,6 +170,56 @@ app.use("/v1/*", async (c, next) => {
   }
   await next();
 });
+
+const warnedMissingLimiters = new Set<string>();
+
+/** Per-IP, per-route-group limit. A missing binding (local `wrangler dev`) logs once and lets the request through. */
+const rateLimit = (binding: "TURN_LIMITER" | "SPEECH_LIMITER" | "LIVE_LIMITER", group: string): MiddlewareHandler<{ Bindings: Env }> =>
+  async (c, next) => {
+    const limiter = c.env[binding];
+    if (!limiter) {
+      if (!warnedMissingLimiters.has(binding)) {
+        warnedMissingLimiters.add(binding);
+        console.warn(JSON.stringify({ event: "rate_limit_unconfigured", binding }));
+      }
+      return next();
+    }
+    const { success } = await limiter.limit({ key: `${group}:${c.req.header("cf-connecting-ip") ?? "unknown"}` });
+    if (!success) return c.json({ error: "rate limited" }, 429);
+    return next();
+  };
+
+/** Rejects a body over `maxBytes` with 413 before anything parses it, by its content-length and by what is actually read. */
+const limitBody = (maxBytes: number): MiddlewareHandler<{ Bindings: Env }> => async (c, next) => {
+  const tooLarge = () => c.json({ error: "payload too large" }, 413);
+  const declared = Number(c.req.header("content-length"));
+  if (declared > maxBytes) return tooLarge();
+  const body = c.req.raw.body;
+  if (!body) return next();
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > maxBytes) {
+      await reader.cancel();
+      return tooLarge();
+    }
+    chunks.push(value);
+  }
+  c.req.raw = new Request(c.req.raw, { body: new Blob(chunks) });
+  return next();
+};
+
+app.use("/v1/tutor/turn", rateLimit("TURN_LIMITER", "turn"), limitBody(MAX_JSON_BODY_BYTES));
+app.use("/v1/tts", rateLimit("SPEECH_LIMITER", "speech"), limitBody(MAX_JSON_BODY_BYTES));
+app.use("/v1/stt", rateLimit("SPEECH_LIMITER", "speech"), limitBody(MAX_AUDIO_BODY_BYTES));
+// Only websocket upgrades count; a plain GET is answered with 426 below.
+app.use("/v1/live/*", async (c, next) =>
+  c.req.header("upgrade")?.toLowerCase() === "websocket" ? rateLimit("LIVE_LIMITER", "live")(c, next) : next(),
+);
 
 app.post("/v1/tutor/turn", async (c) => {
   const raw = await readJson<unknown>(c);
@@ -161,9 +245,9 @@ app.post("/v1/tts", async (c) => {
 });
 
 app.post("/v1/stt", async (c) => {
-  const request = await readJson<SttRequest>(c);
-  if (!request || typeof request.audioBase64 !== "string" || !request.audioBase64 || request.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
-    return c.json({ error: "audio missing or too long" }, 400);
+  const request = validateSttRequest(await readJson<unknown>(c));
+  if (!request) {
+    return c.json({ error: "invalid audio request" }, 400);
   }
   if (c.env.SPEECH_PROVIDER === "gemini" && request.encoding === "AMR_WB") {
     // Gemini's transcription models don't list AMR-WB; the app records AAC for them.

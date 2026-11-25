@@ -1,15 +1,13 @@
+import { SPEAKER_INSTRUCTION } from "./live-setup";
 import type { Env, SpeechSegment, SttRequest } from "./types";
 
 const HOST = "https://generativelanguage.googleapis.com";
 const LIVE_URL = `${HOST}/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
 const LIVE_SAMPLE_RATE = 24_000;
 const LIVE_TIMEOUT_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 10_000;
 
 const LANGUAGE_CODES = { id: "id-ID", en: "en-US" } as const;
-
-// Live models answer like a conversation partner, so the setup tells it to only read the line aloud.
-const SPEAKER_INSTRUCTION =
-  "Kamu adalah suara Kak Pinta, tutor ramah untuk anak usia 4-7 tahun. Ucapkan persis teks yang diberikan dengan hangat dan ceria, dengan tempo pelan dan jelas. Jangan menambah, mengurangi, atau menjawab teks itu.";
 
 /** Minimal WebSocket shape, so tests can stand in for Gemini. */
 export type LiveSocket = {
@@ -23,6 +21,7 @@ export type LiveConnect = (env: Env) => Promise<LiveSocket>;
 export const connectLive: LiveConnect = async (env) => {
   const response = await fetch(LIVE_URL, {
     headers: { upgrade: "websocket", "x-goog-api-key": env.GEMINI_API_KEY ?? "" },
+    signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
   });
   const socket = (response as unknown as { webSocket?: LiveSocket & { accept: () => void } }).webSocket;
   if (!socket) throw new Error(`Gemini Live refused the connection: ${response.status}`);
@@ -93,7 +92,11 @@ const speakSegment = async (env: Env, segment: SpeechSegment, connect: LiveConne
     let tokens = 0;
     let turnComplete = false;
     const timer = setTimeout(() => finish(new Error("Gemini Live timed out")), LIVE_TIMEOUT_MS);
+    let done = false;
     const finish = (error?: Error) => {
+      // The close event follows our own close(); only the first call settles the line and logs its cost.
+      if (done) return;
+      done = true;
       clearTimeout(timer);
       try {
         socket.close();
