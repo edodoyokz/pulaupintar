@@ -20,10 +20,17 @@ export type KakPintaProps = {
 const MOOD_VALUE: Record<KakPintaMood, number> = { talk: 0, listen: 1, think: 2, happy: 3 };
 const CALM_MOOD = 4;
 
-// Kak Pinta, the little yellow-crested cockatoo tutor.
-export const KakPinta = ({ size = 160, mood = "talk", animated = false }: KakPintaProps) => {
-  const rawId = useId();
-  const uid = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
+/** Artboard size in the .riv file, so the Pressable keeps the same proportions. */
+const ARTBOARD = { width: 240, height: 256 };
+
+/**
+ * Kak Pinta, the little yellow-crested cockatoo tutor.
+ *
+ * The character is a Rive state machine: the app sends a mood, a reaction and live voice levels, and
+ * the artwork decides how the body moves. Levels come from the real audio graph, so the mouth opens
+ * on syllables instead of a canned loop.
+ */
+export const KakPinta = ({ size = 160, mood = "talk", reaction }: KakPintaProps) => {
   const reducedMotion = useReducedMotion();
   const { riveFile, error } = useRiveFile(require("../../assets/rive/kak-pinta.riv"));
   const { riveViewRef, setHybridRef } = useRive();
@@ -74,7 +81,6 @@ export const KakPinta = ({ size = 160, mood = "talk", animated = false }: KakPin
     }, 60);
     return () => clearInterval(timer);
   }, [view]);
-
 
   if (error) console.warn("[rive] Kak Pinta failed to load:", error.message);
 

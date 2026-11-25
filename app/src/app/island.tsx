@@ -58,7 +58,7 @@ const Island = () => {
           </View>
 
           <View style={styles.greeting}>
-            <KakPinta size={104} mood={limitReached && !speaking ? "happy" : "talk"} animated={speaking} />
+            <KakPinta size={104} mood={limitReached && !speaking ? "happy" : "talk"} />
             <View style={styles.bubble}>
               <Text style={styles.bubbleText}>
                 {limitReached

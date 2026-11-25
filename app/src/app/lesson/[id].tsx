@@ -368,7 +368,7 @@ const Reward = ({
                 : "Kamu menyelesaikan level ini."
               : "Ayo coba lagi supaya level berikutnya terbuka."}
           </Text>
-          <KakPinta size={180} mood="happy" animated />
+          <KakPinta size={180} mood="happy" />
           {passed && (
             <View style={styles.sticker}>
               <View style={styles.stickerIcon}>
