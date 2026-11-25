@@ -1,8 +1,13 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { FALLBACK_LINES, filterSegments } from "./safety";
 import type { SpeechSegment, TutorTurnRequest, TutorTurnResponse } from "./types";
 
-const MODEL = "claude-opus-5-5";
+const CLAUDE_MODEL = "claude-opus-5-5";
+export const DEFAULT_POLLINATIONS_MODEL = "openai/gpt-5.4-nano";
+const POLLINATIONS_URL = "https://gen.pollinations.ai/v1/chat/completions";
+
+/** What the tutor needs from any LLM: JSON text, and whether the model finished normally. */
+export type TutorModel = (system: string, user: string) => Promise<{ text: string; complete: boolean }>;
 
 const SUBJECT_NAMES = {
   berhitung: "Berhitung",
@@ -82,42 +87,87 @@ const parseSegments = (text: string): SpeechSegment[] => {
   }
 };
 
-export const runTutorTurn = async (
-  client: Anthropic,
-  request: TutorTurnRequest,
-): Promise<TutorTurnResponse> => {
-  const kind = request.step.kind;
-  try {
+export const claudeModel =
+  (client: Anthropic): TutorModel =>
+  async (system, user) => {
     const response = await client.beta.messages.create({
-      model: MODEL,
+      model: CLAUDE_MODEL,
       max_tokens: 2000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       output_config: {
         effort: "low",
         format: { type: "json_schema", schema: OUTPUT_SCHEMA },
       },
-      messages: [{ role: "user", content: describeTurn(request) }],
+      messages: [{ role: "user", content: user }],
     });
-
     console.log(
       JSON.stringify({
         event: "cost",
         kind: "llm",
+        provider: "anthropic",
         model: response.model,
         inputTokens: response.usage.input_tokens,
         cacheReadTokens: response.usage.cache_read_input_tokens,
         outputTokens: response.usage.output_tokens,
       }),
     );
+    const text = response.content.map((block) => (block.type === "text" ? block.text : "")).join("");
+    return { text, complete: response.stop_reason === "end_turn" };
+  };
 
-    if (response.stop_reason !== "end_turn") {
+type ChatCompletion = {
+  model?: string;
+  choices?: { message?: { content?: string | null }; finish_reason?: string }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+};
+
+/** Pollinations' OpenAI-compatible Chat Completions API, e.g. GPT-5 Nano. */
+export const pollinationsModel =
+  (options: { apiKey: string; model?: string; reasoningEffort?: string; fetch?: typeof fetch }): TutorModel =>
+  async (system, user) => {
+    const doFetch = options.fetch ?? fetch;
+    const response = await doFetch(POLLINATIONS_URL, {
+      method: "POST",
+      headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: options.model || DEFAULT_POLLINATIONS_MODEL,
+        max_completion_tokens: 1500,
+        ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "tutor_turn", strict: true, schema: OUTPUT_SCHEMA },
+        },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+    if (!response.ok) throw new Error(`pollinations ${response.status}`);
+    const completion = (await response.json()) as ChatCompletion;
+    console.log(
+      JSON.stringify({
+        event: "cost",
+        kind: "llm",
+        provider: "pollinations",
+        model: completion.model,
+        inputTokens: completion.usage?.prompt_tokens,
+        outputTokens: completion.usage?.completion_tokens,
+      }),
+    );
+    const choice = completion.choices?.[0];
+    return { text: choice?.message?.content ?? "", complete: choice?.finish_reason === "stop" };
+  };
+
+export const runTutorTurn = async (model: TutorModel, request: TutorTurnRequest): Promise<TutorTurnResponse> => {
+  const kind = request.step.kind;
+  try {
+    const { text, complete } = await model(SYSTEM_PROMPT, describeTurn(request));
+    if (!complete) {
       return { segments: FALLBACK_LINES[kind], fallbackUsed: true };
     }
-    const text = response.content
-      .map((block) => (block.type === "text" ? block.text : ""))
-      .join("");
     const { segments, passed } = filterSegments(parseSegments(text), kind);
     return { segments, fallbackUsed: !passed };
   } catch (error) {

@@ -1,3 +1,11 @@
+# Which LLM writes Kak Pinta's lines: pollinations (default) or claude
+TUTOR_PROVIDER=pollinations
+# Secret key (sk_...) from enter.pollinations.ai
+POLLINATIONS_API_KEY=
+# Optional: Pollinations model id (default openai/gpt-5.4-nano) and reasoning effort
+TUTOR_MODEL=
+TUTOR_REASONING_EFFORT=low
+# Only needed when TUTOR_PROVIDER=claude
 ANTHROPIC_API_KEY=
 GOOGLE_CLOUD_API_KEY=
 APP_TOKEN=

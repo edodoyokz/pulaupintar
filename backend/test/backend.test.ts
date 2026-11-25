@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
-import { runTutorTurn } from "../src/tutor";
+import { claudeModel, pollinationsModel, runTutorTurn } from "../src/tutor";
 import type { TutorTurnRequest } from "../src/types";
 
 const turn: TutorTurnRequest = {
@@ -64,23 +64,58 @@ describe("runTutorTurn", () => {
       stop_reason: "end_turn",
       text: JSON.stringify({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }] }),
     });
-    const result = await runTutorTurn(client, turn);
+    const result = await runTutorTurn(claudeModel(client), turn);
     expect(result).toEqual({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }], fallbackUsed: false });
   });
 
   it("uses the prepared line on a refusal", async () => {
-    const result = await runTutorTurn(fakeClient({ stop_reason: "refusal", text: "" }), turn);
+    const result = await runTutorTurn(claudeModel(fakeClient({ stop_reason: "refusal", text: "" })), turn);
     expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
   });
 
   it("uses the prepared line when the API call fails", async () => {
-    const result = await runTutorTurn(fakeClient(new Error("network")), turn);
+    const result = await runTutorTurn(claudeModel(fakeClient(new Error("network"))), turn);
     expect(result.fallbackUsed).toBe(true);
   });
 
   it("uses the prepared line on malformed JSON", async () => {
-    const result = await runTutorTurn(fakeClient({ stop_reason: "end_turn", text: "{oops" }), turn);
+    const result = await runTutorTurn(claudeModel(fakeClient({ stop_reason: "end_turn", text: "{oops" })), turn);
     expect(result.segments).toEqual(FALLBACK_LINES.praise);
+  });
+});
+
+describe("pollinationsModel", () => {
+  const reply = (body: unknown, status = 200) =>
+    (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+
+  it("sends a strict JSON-schema request and returns the segments", async () => {
+    let sent: { url: string; init: RequestInit } | undefined;
+    const fetchSpy = (async (url: string, init: RequestInit) => {
+      sent = { url, init };
+      return new Response(
+        JSON.stringify({
+          model: "openai/gpt-5.4-nano",
+          choices: [{ message: { content: JSON.stringify({ segments: [{ lang: "id", text: "Betul!" }] }) }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 100, completion_tokens: 10 },
+        }),
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await runTutorTurn(pollinationsModel({ apiKey: "sk_test", reasoningEffort: "low", fetch: fetchSpy }), turn);
+    expect(result).toEqual({ segments: [{ lang: "id", text: "Betul!" }], fallbackUsed: false });
+    expect(sent!.url).toBe("https://gen.pollinations.ai/v1/chat/completions");
+    expect((sent!.init.headers as Record<string, string>).authorization).toBe("Bearer sk_test");
+    const body = JSON.parse(String(sent!.init.body));
+    expect(body.model).toBe("openai/gpt-5.4-nano");
+    expect(body.reasoning_effort).toBe("low");
+    expect(body.response_format.json_schema.strict).toBe(true);
+  });
+
+  it("uses the prepared line when the reply is cut off or the call fails", async () => {
+    const cutOff = reply({ choices: [{ message: { content: "{\"segm" }, finish_reason: "length" }] });
+    expect((await runTutorTurn(pollinationsModel({ apiKey: "k", fetch: cutOff }), turn)).fallbackUsed).toBe(true);
+    const failed = reply({ error: "budget" }, 402);
+    expect((await runTutorTurn(pollinationsModel({ apiKey: "k", fetch: failed }), turn)).fallbackUsed).toBe(true);
   });
 });
 

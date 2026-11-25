@@ -1,5 +1,12 @@
 export type Env = {
-  ANTHROPIC_API_KEY: string;
+  /** Which LLM writes Kak Pinta's lines: "pollinations" (default, GPT-5 Nano) or "claude". */
+  TUTOR_PROVIDER?: "pollinations" | "claude";
+  POLLINATIONS_API_KEY?: string;
+  /** Pollinations model id; defaults to openai/gpt-5.4-nano. */
+  TUTOR_MODEL?: string;
+  /** Optional reasoning_effort sent to Pollinations, e.g. "low". */
+  TUTOR_REASONING_EFFORT?: string;
+  ANTHROPIC_API_KEY?: string;
   GOOGLE_CLOUD_API_KEY: string;
   APP_TOKEN: string;
   TTS_VOICE_ID?: string;

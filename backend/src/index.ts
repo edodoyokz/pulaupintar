@@ -2,10 +2,19 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
-import { runTutorTurn } from "./tutor";
+import { claudeModel, pollinationsModel, runTutorTurn, type TutorModel } from "./tutor";
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
+
+const tutorModelFor = (env: Env): TutorModel =>
+  env.TUTOR_PROVIDER === "claude"
+    ? claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }))
+    : pollinationsModel({
+        apiKey: env.POLLINATIONS_API_KEY ?? "",
+        model: env.TUTOR_MODEL,
+        reasoningEffort: env.TUTOR_REASONING_EFFORT,
+      });
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -21,8 +30,7 @@ app.use("/v1/*", async (c, next) => {
 
 app.post("/v1/tutor/turn", async (c) => {
   const request = await c.req.json<TutorTurnRequest>();
-  const client = new Anthropic({ apiKey: c.env.ANTHROPIC_API_KEY });
-  return c.json(await runTutorTurn(client, request));
+  return c.json(await runTutorTurn(tutorModelFor(c.env), request));
 });
 
 app.post("/v1/tts", async (c) => {
