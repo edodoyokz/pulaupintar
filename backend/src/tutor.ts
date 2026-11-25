@@ -219,6 +219,47 @@ export const safetyGuard =
     }
   };
 
+/**
+ * Qwen3Guard (e.g. qwen/qwen3guard-gen-8b) as a safety checker. It is a classifier with its own
+ * categories and no JSON mode: it judges the last assistant message and answers "Safety: Safe",
+ * "Unsafe" or "Controversial". Only "Safe" passes; the reply is turned into {"safe": ...}
+ * so it plugs into safetyGuard like any other model.
+ */
+export const qwenGuardModel =
+  (options: { provider: OpenAiCompatibleProvider; apiKey: string; model: string; fetch?: typeof fetch; timeoutMs?: number }): TutorModel =>
+  async (_system, lines) => {
+    const provider = OPENAI_COMPATIBLE_PROVIDERS[options.provider];
+    const response = await (options.fetch ?? fetch)(provider.url, {
+      method: "POST",
+      signal: AbortSignal.timeout(options.timeoutMs ?? 5_000),
+      headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: options.model,
+        max_tokens: 64,
+        temperature: 0,
+        messages: [
+          { role: "user", content: "Ucapkan sesuatu kepada anak usia 5 tahun yang sedang belajar." },
+          { role: "assistant", content: lines },
+        ],
+      }),
+    });
+    if (!response.ok) throw new Error(`${options.provider} guard ${response.status}`);
+    const completion = (await response.json()) as ChatCompletion;
+    console.log(
+      JSON.stringify({
+        event: "cost",
+        kind: "safety",
+        provider: options.provider,
+        model: completion.model,
+        inputTokens: completion.usage?.prompt_tokens,
+        outputTokens: completion.usage?.completion_tokens,
+      }),
+    );
+    const verdict = /Safety:\s*(Safe|Unsafe|Controversial)/i.exec(completion.choices?.[0]?.message?.content ?? "")?.[1];
+    if (!verdict) return { text: "", complete: false };
+    return { text: JSON.stringify({ safe: verdict.toLowerCase() === "safe" }), complete: true };
+  };
+
 /** Tries the primary model; on an error or a cut-off reply, asks the backup instead. */
 export const withFallback =
   (primary: TutorModel, backup?: TutorModel): TutorModel =>

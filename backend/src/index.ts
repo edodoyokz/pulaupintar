@@ -5,6 +5,7 @@ import { synthesize, transcribe } from "./speech";
 import {
   claudeModel,
   openAiCompatibleModel,
+  qwenGuardModel,
   runTutorTurn,
   SAFETY_OUTPUT_SCHEMA,
   safetyGuard,
@@ -43,6 +44,15 @@ const tutorModelFor = (env: Env): TutorModel => {
   return withFallback(primary, backup);
 };
 
+/** Backup safety checker; a Qwen3Guard model is called in its own classifier format. */
+const safetyBackup = (env: Env): TutorModel | undefined => {
+  const provider = env.SAFETY_FALLBACK_PROVIDER;
+  const model = env.SAFETY_FALLBACK_MODEL;
+  if (!provider) return undefined;
+  if (model?.includes("qwen3guard")) return qwenGuardModel({ provider, apiKey: apiKeyFor(env, provider), model });
+  return backupModel(env, provider, model, SAFETY_OUTPUT_SCHEMA);
+};
+
 const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
   if (!env.SAFETY_MODEL) return undefined;
   const provider = env.SAFETY_PROVIDER ?? (env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations");
@@ -52,9 +62,7 @@ const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
     model: env.SAFETY_MODEL,
     schema: SAFETY_OUTPUT_SCHEMA,
   });
-  return safetyGuard(
-    withFallback(primary, backupModel(env, env.SAFETY_FALLBACK_PROVIDER, env.SAFETY_FALLBACK_MODEL, SAFETY_OUTPUT_SCHEMA)),
-  );
+  return safetyGuard(withFallback(primary, safetyBackup(env)));
 };
 
 const app = new Hono<{ Bindings: Env }>();

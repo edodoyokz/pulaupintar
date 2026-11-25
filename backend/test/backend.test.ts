@@ -2,7 +2,15 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
-import { claudeModel, openAiCompatibleModel, runTutorTurn, safetyGuard, withFallback, type TutorModel } from "../src/tutor";
+import {
+  claudeModel,
+  openAiCompatibleModel,
+  qwenGuardModel,
+  runTutorTurn,
+  safetyGuard,
+  withFallback,
+  type TutorModel,
+} from "../src/tutor";
 import type { TutorTurnRequest } from "../src/types";
 
 const turn: TutorTurnRequest = {
@@ -156,6 +164,29 @@ describe("safety guard", () => {
   ])("uses the prepared line when the guard %s", async (_, reply) => {
     const result = await runTutorTurn(tutor, turn, safetyGuard(guardReplying(reply)));
     expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
+  });
+});
+
+describe("qwenGuardModel", () => {
+  const lines = [{ lang: "id" as const, text: "Hebat, Aya!" }];
+  const guardSaying = (content: string) =>
+    safetyGuard(
+      qwenGuardModel({
+        provider: "pollinations",
+        apiKey: "k",
+        model: "qwen/qwen3guard-gen-8b",
+        fetch: (async () =>
+          new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason: "stop" }] }))) as unknown as typeof fetch,
+      }),
+    );
+
+  it.each([
+    ["Safety: Safe\nCategories: None", true],
+    ["Safety: Unsafe\nCategories: Violent", false],
+    ["Safety: Controversial\nCategories: Politically Sensitive Topics", false],
+    ["I am not sure", false],
+  ])("reads %j as safe=%s", async (content, safe) => {
+    expect(await guardSaying(content)(lines)).toBe(safe);
   });
 });
 
