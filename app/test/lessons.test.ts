@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Subject } from "../src/api/types";
 import {
   completedCount,
   findLesson,
@@ -22,8 +23,45 @@ describe("grading", () => {
     ["kiri", ["kiri"], true],
     ["kanan", ["kiri"], false],
     ["", ["3"], false],
+    ["a", ["a"], true],
+    ["huruf a", ["a"], true],
+    ["i", ["a"], false],
   ])("%s vs %j -> %s", (said, answers, expected) => {
     expect(isCorrectAnswer(said, answers)).toBe(expected);
+  });
+
+  it("does not count saying every option", () => {
+    expect(isCorrectAnswer("kiri atau kanan", ["kiri"], ["kiri", "kanan"])).toBe(false);
+    expect(isCorrectAnswer("yang kiri", ["kiri"], ["kiri", "kanan"])).toBe(true);
+    expect(isCorrectAnswer("red blue yellow", ["red"], ["red", "blue", "yellow"])).toBe(false);
+  });
+
+  it("takes the last number when a child counts aloud", () => {
+    expect(isCorrectAnswer("satu dua tiga empat", ["2"])).toBe(false);
+    expect(isCorrectAnswer("satu dua tiga, tiga!", ["3"])).toBe(true);
+    expect(isCorrectAnswer("tiga apel", ["3"])).toBe(true);
+  });
+});
+
+describe("every built lesson", () => {
+  const subjects: Subject[] = ["berhitung", "membaca", "inggris"];
+  const lessons = subjects.flatMap((subject) =>
+    Array.from({ length: LEVELS_PER_SUBJECT }, (_, index) => findLesson(subject, index + 1)).filter(
+      (lesson) => lesson !== undefined,
+    ),
+  );
+
+  it("accepts each item's own answer and rejects the other answers in the lesson", () => {
+    expect(lessons.length).toBeGreaterThanOrEqual(7);
+    for (const lesson of lessons) {
+      const lessonAnswers = lesson.pool.flatMap((item) => item.answers);
+      for (const item of lesson.pool) {
+        expect(isCorrectAnswer(item.answers[0], item.answers, lessonAnswers), `${lesson.id} ${item.answers[0]}`).toBe(true);
+        for (const other of lessonAnswers.filter((answer) => !item.answers.includes(answer))) {
+          expect(isCorrectAnswer(other, item.answers, lessonAnswers), `${lesson.id} ${other}`).toBe(false);
+        }
+      }
+    }
   });
 });
 

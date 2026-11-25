@@ -11,30 +11,52 @@ const NUMBER_WORDS: Record<string, string> = {
 // Longest phrases first, so "dua belas" becomes 12 before "dua" becomes 2.
 const NUMBER_PHRASES = Object.keys(NUMBER_WORDS).sort((a, b) => b.length - a.length);
 
-const FILLER_WORDS = new Set(["eh", "em", "hmm", "ehm", "itu", "ya", "kak", "jawabannya", "adalah", "the", "a", "it's", "is"]);
+// Dropped only from what the child said, never from an expected answer.
+// Single letters are left out on purpose: "a" is an answer in Membaca.
+const FILLER_WORDS = new Set(["eh", "em", "hmm", "ehm", "itu", "ya", "kak", "jawabannya", "adalah", "the", "it's", "is"]);
 
-export const normalizeAnswer = (text: string): string => {
+const toWords = (text: string): string[] => {
   let normalized = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\s+/g, " ").trim()} `;
   for (const phrase of NUMBER_PHRASES) {
     normalized = normalized.replaceAll(` ${phrase} `, ` ${NUMBER_WORDS[phrase]} `);
   }
-  return normalized
-    .trim()
-    .split(" ")
-    .filter((word) => word && !FILLER_WORDS.has(word))
-    .join(" ");
+  return normalized.trim().split(" ").filter(Boolean);
 };
+
+export const normalizeAnswer = (text: string): string =>
+  toWords(text)
+    .filter((word) => !FILLER_WORDS.has(word))
+    .join(" ");
+
+const isNumber = (word: string) => /^\p{N}+$/u.test(word);
+
+const containsWords = (said: string, words: string) => words !== "" && ` ${said} `.includes(` ${words} `);
 
 /**
  * The app, not the LLM, decides whether an answer is right.
- * A child often wraps the answer in other words ("tiga apel!"), so an
+ *
+ * A child often wraps the answer in other words ("tiga apel!"), so the
  * expected answer counts when it appears as whole words in what was said.
+ * Two guards stop a child from scoring by saying everything:
+ * - for a number answer, the last number said is the answer
+ *   ("satu dua tiga, tiga!" is 3, "satu dua tiga empat" is 4);
+ * - if the child also says another answer from the same lesson
+ *   ("kiri atau kanan"), it does not count.
  */
-export const isCorrectAnswer = (childSaid: string, answers: string[]): boolean => {
-  const said = ` ${normalizeAnswer(childSaid)} `;
-  if (said.trim() === "") return false;
-  return answers.some((answer) => {
-    const expected = normalizeAnswer(answer);
-    return expected !== "" && said.includes(` ${expected} `);
-  });
+export const isCorrectAnswer = (childSaid: string, answers: string[], otherAnswers: string[] = []): boolean => {
+  const said = normalizeAnswer(childSaid);
+  if (said === "") return false;
+  const expected = answers.map((answer) => toWords(answer).join(" ")).filter(Boolean);
+
+  const numericAnswers = expected.filter(isNumber);
+  if (numericAnswers.length > 0) {
+    const lastNumber = said.split(" ").filter(isNumber).at(-1);
+    return lastNumber !== undefined && numericAnswers.includes(lastNumber);
+  }
+
+  if (!expected.some((answer) => containsWords(said, answer))) return false;
+  const rivals = otherAnswers
+    .map((answer) => toWords(answer).join(" "))
+    .filter((rival) => rival !== "" && !expected.some((answer) => containsWords(answer, rival)));
+  return !rivals.some((rival) => containsWords(said, rival));
 };

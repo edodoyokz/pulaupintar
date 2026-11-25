@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { findLessonById, LEVELS_PER_SUBJECT, pickSessionItems, PLACES, type AppItem, type Lesson } from "@/lessons/catalog";
+import { findLesson, findLessonById, pickSessionItems, PLACES, type AppItem, type Lesson } from "@/lessons/catalog";
 import { useProfile } from "@/profile/profile-context";
 import type { ChildProfile } from "@/profile/storage";
 import { useTutorSession } from "@/tutor/use-tutor-session";
@@ -14,9 +14,12 @@ import { colors, fonts, radius, spacing } from "@/ui/theme";
 
 const LessonScreen = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { child } = useProfile();
+  const { child, limitReached } = useProfile();
+  // Decided once on entry, so finishing a lesson right at the limit still shows the reward.
+  const [blocked] = useState(limitReached);
   const lesson = findLessonById(id);
   if (!lesson || !child) return null;
+  if (blocked) return <TimeUp childName={child.name} />;
   return <Session lesson={lesson} child={child} />;
 };
 
@@ -24,7 +27,7 @@ export default LessonScreen;
 
 const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => {
   const [items] = useState<AppItem[]>(() => pickSessionItems(lesson));
-  const { recordSession } = useProfile();
+  const { recordSession, recordUsage } = useProfile();
   const session = useTutorSession(lesson, child, items);
   const started = useRef(false);
   const recorded = useRef(false);
@@ -46,6 +49,21 @@ const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => 
       seconds: session.elapsedSeconds(),
     });
   }, [session, lesson.id, recordSession]);
+
+  // Leaving early still counts toward the parent's daily limit.
+  const elapsedSeconds = session.elapsedSeconds;
+  const recordUsageRef = useRef(recordUsage);
+  recordUsageRef.current = recordUsage;
+  const elapsedRef = useRef(elapsedSeconds);
+  elapsedRef.current = elapsedSeconds;
+  useEffect(
+    () => () => {
+      if (!started.current || recorded.current) return;
+      recorded.current = true;
+      recordUsageRef.current(elapsedRef.current());
+    },
+    [],
+  );
 
   if (session.phase === "done") {
     return <Reward lesson={lesson} childName={child.name} stars={session.stars} passed={session.passed} />;
@@ -87,12 +105,13 @@ const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => 
       </View>
 
       <View style={styles.controls}>
-        <CircleButton label="Dengar lagi" onPress={session.replay} style={styles.replay}>
+        <CircleButton label="Dengar lagi" onPress={session.replay} disabled={session.phase !== "your-turn"} style={styles.replay}>
           <Icon name="speaker" size={30} color={colors.blue} />
         </CircleButton>
         <CircleButton
           label={listening ? "Selesai bicara" : "Tekan untuk menjawab"}
           onPress={listening ? session.stopListening : session.startListening}
+          disabled={!micEnabled}
           style={[
             styles.mic,
             listening && { backgroundColor: colors.red, borderBottomColor: colors.redDark },
@@ -115,7 +134,7 @@ const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => 
 };
 
 const Reward = ({ lesson, childName, stars, passed }: { lesson: Lesson; childName: string; stars: number; passed: boolean }) => {
-  const hasNext = passed && lesson.level < LEVELS_PER_SUBJECT;
+  const hasNext = passed && findLesson(lesson.subject, lesson.level + 1) !== undefined;
   return (
     <SafeAreaView style={[styles.screen, styles.rewardScreen]}>
       <View style={styles.starRow} accessibilityLabel={`${stars} bintang`}>
@@ -151,6 +170,17 @@ const Reward = ({ lesson, childName, stars, passed }: { lesson: Lesson; childNam
     </SafeAreaView>
   );
 };
+
+const TimeUp = ({ childName }: { childName: string }) => (
+  <SafeAreaView style={[styles.screen, styles.rewardScreen]}>
+    <Text style={styles.rewardTitle}>Waktunya istirahat</Text>
+    <Text style={styles.rewardText}>{`Hari ini ${childName} sudah belajar banyak. Besok kita belajar lagi, ya!`}</Text>
+    <KakPinta size={190} mood="happy" />
+    <View style={styles.rewardFooter}>
+      <BigButton label="Kembali ke pulau" color={colors.green} shadow={colors.greenDark} onPress={() => router.dismissTo("/island")} />
+    </View>
+  </SafeAreaView>
+);
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.cream, paddingHorizontal: 20, gap: 12 },

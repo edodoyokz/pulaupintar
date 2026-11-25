@@ -82,7 +82,7 @@ const PlaceCard = ({ place, done, locked }: { place: Place; done: number; locked
       </Text>
       <View style={styles.levelDots}>
         {Array.from({ length: LEVELS_PER_SUBJECT }, (_, index) => (
-          <View key={index} style={[styles.levelDot, { backgroundColor: index <= done ? place.color : place.tint }]} />
+          <View key={index} style={[styles.levelDot, { backgroundColor: index < done ? place.color : place.tint }]} />
         ))}
       </View>
     </View>

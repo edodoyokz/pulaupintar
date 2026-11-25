@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
+import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
 import { runTutorTurn } from "./tutor";
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
@@ -25,9 +26,11 @@ app.post("/v1/tutor/turn", async (c) => {
 });
 
 app.post("/v1/tts", async (c) => {
-  const { segments } = await c.req.json<TtsRequest>();
-  if (!Array.isArray(segments) || segments.length === 0) {
-    return c.json({ error: "segments required" }, 400);
+  const { segments: requested } = await c.req.json<TtsRequest>();
+  // Only short, filtered lines can be voiced, so the app token can't run up the TTS bill or speak anything.
+  const segments = validateSpeechRequest(requested);
+  if (!segments) {
+    return c.json({ error: "segments missing, too long, or not allowed" }, 400);
   }
   const audioBase64 = await synthesize(c.env, segments);
   return c.json({ audioBase64, mimeType: "audio/mpeg" });

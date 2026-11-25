@@ -105,4 +105,19 @@ describe("routes", () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it.each([
+    ["too long", [{ lang: "id", text: "a".repeat(500) }]],
+    ["too many segments", Array.from({ length: 7 }, () => ({ lang: "id", text: "Halo" }))],
+    ["unsafe text", [{ lang: "id", text: "Buka www.contoh.com ya" }]],
+    ["unknown language", [{ lang: "fr", text: "Bonjour" }]],
+    ["not text", [{ lang: "id", text: 42 }]],
+  ])("rejects TTS requests that are %s", async (_, segments) => {
+    const response = await app.request(
+      "/v1/tts",
+      { method: "POST", body: JSON.stringify({ segments }), headers: { "x-app-token": "secret" } },
+      env,
+    );
+    expect(response.status).toBe(400);
+  });
 });
