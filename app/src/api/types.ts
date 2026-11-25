@@ -26,7 +26,7 @@ export type TutorTurnRequest = {
 
 export type TutorTurnResponse = { segments: SpeechSegment[]; fallbackUsed: boolean };
 
-export type SttEncoding = "AMR_WB" | "LINEAR16";
+export type SttEncoding = "AMR_WB" | "LINEAR16" | "AAC";
 export type SttRequest = {
   audioBase64: string;
   encoding: SttEncoding;

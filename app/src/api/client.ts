@@ -1,3 +1,4 @@
+import type { LiveToken } from "@/tutor/live/pcm";
 import type { SpeechSegment, SttRequest, TutorTurnRequest, TutorTurnResponse } from "./types";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -25,7 +26,10 @@ export const requestTutorTurn = (request: TutorTurnRequest) =>
   post<TutorTurnResponse>("/v1/tutor/turn", request);
 
 export const requestSpeech = (segments: SpeechSegment[]) =>
-  post<{ audioBase64: string }>("/v1/tts", { segments });
+  post<{ audioBase64: string; mimeType: "audio/mpeg" | "audio/wav" }>("/v1/tts", { segments });
 
 export const requestTranscript = (request: SttRequest) =>
   post<{ transcript: string }>("/v1/stt", request);
+
+/** A one-time Gemini Live token for speaking or listening; the API key never leaves the server. */
+export const requestLiveToken = (role: "speak" | "listen") => post<LiveToken>("/v1/live/token", { role });
