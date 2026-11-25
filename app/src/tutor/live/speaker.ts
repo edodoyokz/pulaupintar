@@ -11,7 +11,7 @@ const END_GRACE_MS = 3_000;
 
 /**
  * Kak Pinta's voice: Gemini Live speaks each line and its audio plays while it is still arriving.
- * The session only reads lines aloud (the token is locked to that), and a stopped line closes the socket
+ * The session only reads lines aloud (the Worker relay only passes approved lines), and a stopped line closes the socket
  * so nothing queued behind it can still be heard.
  */
 export class LiveSpeaker {
@@ -19,24 +19,44 @@ export class LiveSpeaker {
   private connection: LiveConnection | null = null;
   private onMessage: (message: LiveServerMessage) => void = () => undefined;
   private cancel: (() => void) | null = null;
+  private failTurn: ((error: Error) => void) | null = null;
+  /** Bumped by stop and dispose, so a line that was still connecting is abandoned. */
+  private epoch = 0;
+  /** Lines play one after another, so two never share the socket. */
+  private queue: Promise<unknown> = Promise.resolve();
 
   private async ensureConnection(): Promise<LiveConnection> {
     if (this.connection?.isOpen()) return this.connection;
-    this.connection = await openLiveConnection("speak", {
-      onMessage: (message) => this.onMessage(message),
+    let opened: LiveConnection | null = null;
+    opened = await openLiveConnection("speak", {
+      onMessage: (message) => {
+        if (this.connection === opened) this.onMessage(message);
+      },
       onClose: () => {
+        if (this.connection !== opened) return;
         this.connection = null;
+        this.failTurn?.(new Error("live socket closed"));
       },
     });
-    return this.connection;
+    this.connection = opened;
+    return opened;
   }
 
   /** Resolves when the line has been spoken or stopped; rejects if Live can't be reached or sends nothing. */
-  async speak(segments: SpeechSegment[]): Promise<void> {
+  speak(segments: SpeechSegment[]): Promise<void> {
+    const epoch = this.epoch;
+    const run = this.queue.then(() => this.speakNow(segments, epoch));
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async speakNow(segments: SpeechSegment[], epoch: number): Promise<void> {
+    if (epoch !== this.epoch) return;
     const connection = await this.ensureConnection();
+    if (epoch !== this.epoch) return this.closeIfIdle();
     const context = (this.context ??= new AudioContext({ sampleRate: OUTPUT_RATE }));
     await context.resume();
-    const text = segments.map((segment) => segment.text).join(" ");
+    if (epoch !== this.epoch) return this.closeIfIdle();
 
     await new Promise<void>((resolve, reject) => {
       const source: AudioBufferQueueSourceNode = context.createBufferQueueSource();
@@ -55,6 +75,7 @@ export class LiveSpeaker {
         clearTimeout(turnTimer);
         clearTimeout(endTimer);
         this.cancel = null;
+        this.failTurn = null;
         this.onMessage = () => undefined;
         if (started) {
           try {
@@ -63,8 +84,12 @@ export class LiveSpeaker {
             // already finished
           }
         }
-        if (error) reject(error);
-        else resolve();
+        if (error) {
+          // Gemini may still be generating this line; a fresh session keeps its audio out of the next one.
+          this.connection?.close();
+          this.connection = null;
+          reject(error);
+        } else resolve();
       };
       const turnTimer = setTimeout(() => finish(new Error("live turn timed out")), TURN_TIMEOUT_MS);
       const startIfReady = () => {
@@ -86,6 +111,7 @@ export class LiveSpeaker {
         this.connection = null;
         finish();
       };
+      this.failTurn = finish;
       this.onMessage = (message) => {
         const content = message.serverContent;
         for (const part of content?.modelTurn?.parts ?? []) {
@@ -110,15 +136,26 @@ export class LiveSpeaker {
           }
         }
       };
-      connection.send({ realtimeInput: { text } });
+      // The Worker checks the lines (same rules as /v1/tts) before Gemini sees them.
+      connection.send({ segments });
     });
   }
 
+  /** A line abandoned while connecting leaves an open socket; close it so nothing plays later. */
+  private closeIfIdle() {
+    if (!this.cancel) {
+      this.connection?.close();
+      this.connection = null;
+    }
+  }
+
   stop() {
+    this.epoch += 1;
     this.cancel?.();
   }
 
   dispose() {
+    this.epoch += 1;
     this.cancel?.();
     this.connection?.close();
     this.connection = null;

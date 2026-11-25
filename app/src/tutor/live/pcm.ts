@@ -62,8 +62,6 @@ export const frameToText = (data: unknown): string => {
   return decodeURIComponent(escape(latin1));
 };
 
-export type LiveToken = { token: string; url: string; setup: Record<string, unknown> };
-
 export type LiveServerMessage = {
   setupComplete?: unknown;
   serverContent?: {

@@ -7,7 +7,7 @@
   // Non-secret settings. API keys go in secrets: npx wrangler secret put GEMINI_API_KEY (and SUMOPOD_API_KEY, POLLINATIONS_API_KEY)
   "vars": {
     // Gemini does everything: it writes Kak Pinta's lines, checks them, and (SPEECH_PROVIDER) speaks and hears.
-    // The app streams voice straight to Gemini Live 3.8 with one-time tokens from /v1/live/token;
+    // The app streams voice through the Worker (/v1/live/speak and /v1/live/listen) to Gemini Live 3.8, which checks every line;
     // /v1/tts and /v1/stt (also Gemini) are the fallback when streaming isn't available.
     "TUTOR_PROVIDER": "gemini",
     "TUTOR_MODEL": "gemini-3.1-flash-lite",

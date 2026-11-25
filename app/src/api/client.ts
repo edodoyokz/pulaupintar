@@ -1,4 +1,3 @@
-import type { LiveToken } from "@/tutor/live/pcm";
 import type { SpeechSegment, SttRequest, TutorTurnRequest, TutorTurnResponse } from "./types";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -31,5 +30,8 @@ export const requestSpeech = (segments: SpeechSegment[]) =>
 export const requestTranscript = (request: SttRequest) =>
   post<{ transcript: string }>("/v1/stt", request);
 
-/** A one-time Gemini Live token for speaking or listening; the API key never leaves the server. */
-export const requestLiveToken = (role: "speak" | "listen") => post<LiveToken>("/v1/live/token", { role });
+/** Websocket address and headers for the Worker's Gemini Live relay (the phone holds no Gemini token). */
+export const liveRelay = (role: "speak" | "listen") => ({
+  url: `${API_URL.replace(/^http/, "ws")}/v1/live/${role}`,
+  headers: { "x-app-token": APP_TOKEN },
+});

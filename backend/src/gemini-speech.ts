@@ -91,6 +91,7 @@ const speakSegment = async (env: Env, segment: SpeechSegment, connect: LiveConne
   return new Promise<Uint8Array>((resolve, reject) => {
     const chunks: Uint8Array[] = [];
     let tokens = 0;
+    let turnComplete = false;
     const timer = setTimeout(() => finish(new Error("Gemini Live timed out")), LIVE_TIMEOUT_MS);
     const finish = (error?: Error) => {
       clearTimeout(timer);
@@ -100,6 +101,7 @@ const speakSegment = async (env: Env, segment: SpeechSegment, connect: LiveConne
         // already closed
       }
       if (error) reject(error);
+      else if (!turnComplete) reject(new Error("Gemini Live closed before the line was finished"));
       else if (chunks.length === 0) reject(new Error("Gemini Live sent no audio"));
       else {
         console.log(JSON.stringify({ event: "cost", kind: "tts", provider: "gemini-live", characters: segment.text.length, tokens }));
@@ -123,7 +125,10 @@ const speakSegment = async (env: Env, segment: SpeechSegment, connect: LiveConne
         if (part.inlineData) chunks.push(base64ToBytes(part.inlineData.data));
       }
       tokens = message.usageMetadata?.totalTokenCount ?? tokens;
-      if (message.serverContent?.turnComplete) finish();
+      if (message.serverContent?.turnComplete) {
+        turnComplete = true;
+        finish();
+      }
     };
     socket.send(
       JSON.stringify({

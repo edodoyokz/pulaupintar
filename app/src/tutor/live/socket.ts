@@ -1,7 +1,10 @@
-import { requestLiveToken } from "@/api/client";
+import { liveRelay } from "@/api/client";
 import { frameToText, type LiveServerMessage } from "./pcm";
 
 const SETUP_TIMEOUT_MS = 6_000;
+
+// React Native's WebSocket takes request headers as a third argument; the DOM typings don't know it.
+const NativeWebSocket = WebSocket as unknown as new (url: string, protocols: null, options: { headers: Record<string, string> }) => WebSocket;
 
 export type LiveConnection = {
   send: (message: object) => void;
@@ -10,16 +13,16 @@ export type LiveConnection = {
 };
 
 /**
- * Opens a Gemini Live socket with a one-time token and sends the locked setup.
- * Resolves once Gemini confirms the setup, so callers can send right away.
+ * Opens the Worker's Gemini Live relay. The Worker holds the key, sets the session up itself and
+ * answers `setupComplete` once Gemini is ready, so callers can send right away.
  */
 export const openLiveConnection = async (
   role: "speak" | "listen",
   handlers: { onMessage: (message: LiveServerMessage) => void; onClose: () => void },
 ): Promise<LiveConnection> => {
-  const { url, setup } = await requestLiveToken(role);
+  const { url, headers } = liveRelay(role);
   return new Promise<LiveConnection>((resolve, reject) => {
-    const socket = new WebSocket(url);
+    const socket = new NativeWebSocket(url, null, { headers });
     socket.binaryType = "arraybuffer";
     let ready = false;
     const timer = setTimeout(() => fail(new Error("live setup timed out")), SETUP_TIMEOUT_MS);
@@ -33,7 +36,6 @@ export const openLiveConnection = async (
       socket.close();
       if (!ready) reject(error);
     };
-    socket.onopen = () => socket.send(JSON.stringify({ setup }));
     socket.onerror = () => fail(new Error("live socket error"));
     socket.onclose = () => {
       clearTimeout(timer);

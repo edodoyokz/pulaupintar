@@ -34,14 +34,17 @@ const getLiveVoice = (): LiveVoice | null => {
 };
 /** Turned off for the rest of the run when the live microphone can't start, so the child is not stuck. */
 let liveListeningBroken = false;
+let liveFailures = 0;
 
-// Formats the speech-to-text service reads directly: AMR-WB on Android, WAV (PCM) on iOS.
+// Formats the speech-to-text service reads directly. Gemini: AAC (ADTS) on Android, WAV (PCM) on iOS.
+// Google Cloud Speech (EXPO_PUBLIC_SPEECH=google, with SPEECH_PROVIDER=google on the backend): AMR-WB on Android.
+const USE_GOOGLE_STT = process.env.EXPO_PUBLIC_SPEECH === "google";
 const RECORDING_OPTIONS: RecordingOptions = {
-  extension: Platform.OS === "ios" ? ".wav" : ".amr",
+  extension: Platform.OS === "ios" ? ".wav" : USE_GOOGLE_STT ? ".amr" : ".aac",
   sampleRate: SAMPLE_RATE,
   numberOfChannels: 1,
-  bitRate: 23_850,
-  android: { outputFormat: "amrwb", audioEncoder: "amr_wb" },
+  bitRate: Platform.OS === "android" && !USE_GOOGLE_STT ? 64_000 : 23_850,
+  android: USE_GOOGLE_STT ? { outputFormat: "amrwb", audioEncoder: "amr_wb" } : { outputFormat: "aac_adts", audioEncoder: "aac" },
   ios: {
     outputFormat: IOSOutputFormat.LINEARPCM,
     audioQuality: AudioQuality.HIGH,
@@ -52,7 +55,7 @@ const RECORDING_OPTIONS: RecordingOptions = {
   web: {},
 };
 
-const ENCODING: SttEncoding = Platform.OS === "ios" ? "LINEAR16" : "AMR_WB";
+const ENCODING: SttEncoding = Platform.OS === "ios" ? "LINEAR16" : USE_GOOGLE_STT ? "AMR_WB" : "AAC";
 
 export const prepareAudio = async (): Promise<boolean> => {
   const live = getLiveVoice();
@@ -182,12 +185,14 @@ export const useChildMicrophone = () => {
     const live = getLiveVoice();
     if (live && !liveListeningBroken) {
       const listener = new live.Listener();
+      // Stored before the await, so leaving the lesson while the microphone starts still stops it.
+      liveListener.current = listener;
       try {
         await listener.start();
-        liveListener.current = listener;
         return;
       } catch {
         liveListeningBroken = true;
+        if (liveListener.current === listener) liveListener.current = null;
         await listener.cancel().catch(() => undefined);
       }
     }
@@ -200,7 +205,16 @@ export const useChildMicrophone = () => {
     const listener = liveListener.current;
     if (listener) {
       liveListener.current = null;
-      return listener.stopAndTranscribe();
+      try {
+        const transcript = await listener.stopAndTranscribe();
+        liveFailures = 0;
+        return transcript;
+      } catch (error) {
+        // Two failures in a row mean Live isn't reachable; use the recorder path from the next answer on.
+        liveFailures += 1;
+        if (liveFailures >= 2) liveListeningBroken = true;
+        throw error;
+      }
     }
     await recorder.stop();
     if (!recorder.uri) throw new Error("nothing was recorded");

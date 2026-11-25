@@ -58,6 +58,28 @@ describe("synthesizeWithGemini", () => {
     expect(sent[0].setup.generationConfig.speechConfig.languageCode).toBe("en-US");
   });
 
+  it("rejects a socket that closes before the line is finished, even after some audio", async () => {
+    const socket = async (): Promise<LiveSocket> => {
+      const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
+      const emit = (type: string, data?: unknown) => listeners[type]?.forEach((listener) => listener({ data }));
+      return {
+        addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
+        close: () => undefined,
+        send: (data) => {
+          const message = JSON.parse(data);
+          if (message.setup) queueMicrotask(() => emit("message", JSON.stringify({ setupComplete: {} })));
+          if (message.realtimeInput) {
+            queueMicrotask(() => {
+              emit("message", JSON.stringify({ serverContent: { modelTurn: { parts: [{ inlineData: { data: b64([1, 2]) } }] } } }));
+              emit("close");
+            });
+          }
+        },
+      };
+    };
+    await expect(synthesizeWithGemini(env, [{ lang: "id", text: "Halo" }], socket)).rejects.toThrow("closed before");
+  });
+
   it("fails when Live sends no audio, so the app falls back to the device voice", async () => {
     await expect(synthesizeWithGemini(env, [{ lang: "id", text: "Halo" }], fakeLive([], []))).rejects.toThrow("no audio");
   });
@@ -82,23 +104,5 @@ describe("transcribeWithGemini", () => {
   it("throws on an error response so a failure never counts as a wrong answer", async () => {
     const fakeFetch = (async () => new Response("no", { status: 500 })) as unknown as typeof fetch;
     await expect(transcribeWithGemini(env, request, fakeFetch)).rejects.toThrow("500");
-  });
-});
-
-describe("createLiveToken", () => {
-  it("locks the token to the role's setup and keeps the key out of the result", async () => {
-    const { createLiveToken } = await import("../src/live-token");
-    let sent: any;
-    const fakeFetch = (async (_url: string, init: RequestInit) => {
-      sent = JSON.parse(String(init.body));
-      return Response.json({ name: "auth_tokens/abc" });
-    }) as unknown as typeof fetch;
-    const speak = await createLiveToken(env, "speak", fakeFetch);
-    expect(sent.uses).toBe(1);
-    expect(sent.bidiGenerateContentSetup.model).toBe("models/gemini-3.8-live");
-    expect(speak.url).toContain("access_token=auth_tokens%2Fabc");
-    expect(JSON.stringify(speak)).not.toContain("key");
-    const listen = await createLiveToken(env, "listen", fakeFetch);
-    expect(listen.setup).toMatchObject({ model: "models/gemini-3.5-transcribe-live", inputAudioTranscription: {} });
   });
 });
