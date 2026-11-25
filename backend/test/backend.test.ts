@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
-import { claudeModel, openAiCompatibleModel, runTutorTurn } from "../src/tutor";
+import { claudeModel, openAiCompatibleModel, runTutorTurn, safetyGuard, type TutorModel } from "../src/tutor";
 import type { TutorTurnRequest } from "../src/types";
 
 const turn: TutorTurnRequest = {
@@ -130,6 +130,32 @@ describe("openAiCompatibleModel", () => {
     expect((await runTutorTurn(openAiCompatibleModel({ provider: "pollinations", apiKey: "k", fetch: cutOff }), turn)).fallbackUsed).toBe(true);
     const failed = reply({ error: "budget" }, 402);
     expect((await runTutorTurn(openAiCompatibleModel({ provider: "sumopod", apiKey: "k", fetch: failed }), turn)).fallbackUsed).toBe(true);
+  });
+});
+
+describe("safety guard", () => {
+  const tutor: TutorModel = async () => ({
+    text: JSON.stringify({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }] }),
+    complete: true,
+  });
+  const guardReplying = (reply: { text: string; complete: boolean } | Error): TutorModel => async () => {
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
+
+  it("lets a line through when the guard says it is safe", async () => {
+    const result = await runTutorTurn(tutor, turn, safetyGuard(guardReplying({ text: '{"safe":true}', complete: true })));
+    expect(result).toEqual({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }], fallbackUsed: false });
+  });
+
+  it.each([
+    ["says unsafe", { text: '{"safe":false}', complete: true }],
+    ["is cut off", { text: '{"saf', complete: false }],
+    ["returns garbage", { text: "maybe", complete: true }],
+    ["fails", new Error("timeout")],
+  ])("uses the prepared line when the guard %s", async (_, reply) => {
+    const result = await runTutorTurn(tutor, turn, safetyGuard(guardReplying(reply)));
+    expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
   });
 });
 

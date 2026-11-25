@@ -2,20 +2,45 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
-import { claudeModel, openAiCompatibleModel, runTutorTurn, type TutorModel } from "./tutor";
+import {
+  claudeModel,
+  openAiCompatibleModel,
+  runTutorTurn,
+  SAFETY_OUTPUT_SCHEMA,
+  safetyGuard,
+  type OpenAiCompatibleProvider,
+  type SafetyGuard,
+  type TutorModel,
+} from "./tutor";
 import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
+
+const apiKeyFor = (env: Env, provider: OpenAiCompatibleProvider) =>
+  (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
 
 const tutorModelFor = (env: Env): TutorModel => {
   if (env.TUTOR_PROVIDER === "claude") return claudeModel(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }));
   const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
   return openAiCompatibleModel({
     provider,
-    apiKey: (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "",
+    apiKey: apiKeyFor(env, provider),
     model: env.TUTOR_MODEL,
     reasoningEffort: env.TUTOR_REASONING_EFFORT,
   });
+};
+
+const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
+  if (!env.SAFETY_MODEL) return undefined;
+  const provider = env.SAFETY_PROVIDER ?? (env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations");
+  return safetyGuard(
+    openAiCompatibleModel({
+      provider,
+      apiKey: apiKeyFor(env, provider),
+      model: env.SAFETY_MODEL,
+      schema: SAFETY_OUTPUT_SCHEMA,
+    }),
+  );
 };
 
 const app = new Hono<{ Bindings: Env }>();
@@ -32,7 +57,7 @@ app.use("/v1/*", async (c, next) => {
 
 app.post("/v1/tutor/turn", async (c) => {
   const request = await c.req.json<TutorTurnRequest>();
-  return c.json(await runTutorTurn(tutorModelFor(c.env), request));
+  return c.json(await runTutorTurn(tutorModelFor(c.env), request, safetyGuardFor(c.env)));
 });
 
 app.post("/v1/tts", async (c) => {

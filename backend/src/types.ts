@@ -7,6 +7,12 @@ export type Env = {
   TUTOR_MODEL?: string;
   /** Optional reasoning_effort for Pollinations or Sumopod, e.g. "low". */
   TUTOR_REASONING_EFFORT?: string;
+  /**
+   * Optional second model that checks each line before a child hears it, e.g. "jev-1.14.0".
+   * Uses SAFETY_PROVIDER (default: the tutor's provider, or pollinations when the tutor is Claude).
+   */
+  SAFETY_MODEL?: string;
+  SAFETY_PROVIDER?: "pollinations" | "sumopod";
   ANTHROPIC_API_KEY?: string;
   GOOGLE_CLOUD_API_KEY: string;
   APP_TOKEN: string;
