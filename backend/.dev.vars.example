@@ -1,4 +1,4 @@
-# Which LLM service writes Kak Pinta's lines: sumopod (set in wrangler.jsonc), pollinations or claude
+# Which LLM service writes Kak Pinta's lines: sumopod (set in wrangler.jsonc) or pollinations
 TUTOR_PROVIDER=sumopod
 # Secret key (sk_...) from enter.pollinations.ai
 POLLINATIONS_API_KEY=
@@ -16,8 +16,6 @@ TUTOR_FALLBACK_PROVIDER=pollinations
 TUTOR_FALLBACK_MODEL=openai/gpt-5-nano
 SAFETY_FALLBACK_PROVIDER=pollinations
 SAFETY_FALLBACK_MODEL=qwen/qwen3guard-gen-8b
-# Only needed when TUTOR_PROVIDER=claude
-ANTHROPIC_API_KEY=
 GOOGLE_CLOUD_API_KEY=
 APP_TOKEN=
 # Optional: a specific Google voice name per language

@@ -1,8 +1,6 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { FALLBACK_LINES, filterSegments } from "./safety";
 import type { SpeechSegment, TutorTurnRequest, TutorTurnResponse } from "./types";
 
-const CLAUDE_MODEL = "claude-opus-5-5";
 /** OpenAI-compatible providers the tutor can use, with their chat endpoint and default model. */
 export const OPENAI_COMPATIBLE_PROVIDERS = {
   pollinations: { url: "https://gen.pollinations.ai/v1/chat/completions", defaultModel: "openai/gpt-5-nano" },
@@ -99,36 +97,6 @@ export const parseSegments = (text: string): SpeechSegment[] => {
     return [];
   }
 };
-
-export const claudeModel =
-  (client: Anthropic): TutorModel =>
-  async (system, user) => {
-    const response = await client.beta.messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 2000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: OUTPUT_SCHEMA },
-      },
-      messages: [{ role: "user", content: user }],
-    });
-    console.log(
-      JSON.stringify({
-        event: "cost",
-        kind: "llm",
-        provider: "anthropic",
-        model: response.model,
-        inputTokens: response.usage.input_tokens,
-        cacheReadTokens: response.usage.cache_read_input_tokens,
-        outputTokens: response.usage.output_tokens,
-      }),
-    );
-    const text = response.content.map((block) => (block.type === "text" ? block.text : "")).join("");
-    return { text, complete: response.stop_reason === "end_turn" };
-  };
 
 type ChatCompletion = {
   model?: string;

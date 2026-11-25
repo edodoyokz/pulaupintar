@@ -1,6 +1,6 @@
 export type Env = {
-  /** Which LLM service writes Kak Pinta's lines: "pollinations" (default), "sumopod" or "claude". */
-  TUTOR_PROVIDER?: "pollinations" | "sumopod" | "claude";
+  /** Which LLM service writes Kak Pinta's lines: "sumopod" or "pollinations" (used when unset). */
+  TUTOR_PROVIDER?: "pollinations" | "sumopod";
   POLLINATIONS_API_KEY?: string;
   SUMOPOD_API_KEY?: string;
   /** Model id at the chosen provider; defaults to GPT-5 Nano (openai/gpt-5-nano on Pollinations, gpt-5-nano on Sumopod). */
@@ -9,7 +9,7 @@ export type Env = {
   TUTOR_REASONING_EFFORT?: string;
   /**
    * Optional second model that checks each line before a child hears it, e.g. "jev-1.14.0".
-   * Uses SAFETY_PROVIDER (default: the tutor's provider, or pollinations when the tutor is Claude).
+   * Uses SAFETY_PROVIDER (default: the tutor's provider).
    */
   SAFETY_MODEL?: string;
   SAFETY_PROVIDER?: "pollinations" | "sumopod";
@@ -18,7 +18,6 @@ export type Env = {
   TUTOR_FALLBACK_MODEL?: string;
   SAFETY_FALLBACK_PROVIDER?: "pollinations" | "sumopod";
   SAFETY_FALLBACK_MODEL?: string;
-  ANTHROPIC_API_KEY?: string;
   GOOGLE_CLOUD_API_KEY: string;
   APP_TOKEN: string;
   TTS_VOICE_ID?: string;

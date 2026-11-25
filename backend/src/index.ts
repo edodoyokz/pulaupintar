@@ -1,16 +1,13 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
 import {
-  claudeModel,
   openAiCompatibleModel,
   isSafetyReply,
   isTutorReply,
   qwenGuardModel,
   runTutorTurn,
   SAFETY_CALL_TIMEOUT_MS,
-  TUTOR_CALL_TIMEOUT_MS,
   SAFETY_OUTPUT_SCHEMA,
   safetyGuard,
   withFallback,
@@ -38,10 +35,6 @@ const tutorBackup = (env: Env): TutorModel | undefined => {
 
 const tutorModelFor = (env: Env): TutorModel => {
   const backup = tutorBackup(env);
-  if (env.TUTOR_PROVIDER === "claude") {
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, timeout: TUTOR_CALL_TIMEOUT_MS, maxRetries: 0 });
-    return withFallback(claudeModel(client), backup, isTutorReply);
-  }
   const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
   const primary = openAiCompatibleModel({
     provider,

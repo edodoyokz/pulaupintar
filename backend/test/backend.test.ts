@@ -1,9 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import app from "../src/index";
 import { FALLBACK_LINES, filterSegments } from "../src/safety";
 import {
-  claudeModel,
   openAiCompatibleModel,
   isSafetyReply,
   qwenGuardModel,
@@ -21,22 +19,13 @@ const turn: TutorTurnRequest = {
   step: { kind: "praise", item: { question: "Ada berapa apel?", answers: ["3", "tiga"] }, childSaid: "tiga" },
 };
 
-const fakeClient = (reply: { stop_reason: string; text: string } | Error) =>
-  ({
-    beta: {
-      messages: {
-        create: async () => {
-          if (reply instanceof Error) throw reply;
-          return {
-            model: "claude-opus-5-5",
-            stop_reason: reply.stop_reason,
-            usage: { input_tokens: 10, cache_read_input_tokens: 0, output_tokens: 5 },
-            content: [{ type: "text", text: reply.text }],
-          };
-        },
-      },
-    },
-  }) as unknown as Anthropic;
+/** A model that replies with fixed text, or fails. */
+const fakeModel =
+  (reply: { complete: boolean; text: string } | Error): TutorModel =>
+  async () => {
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
 
 describe("filterSegments", () => {
   it("keeps short, safe Indonesian and English lines", () => {
@@ -69,26 +58,26 @@ describe("filterSegments", () => {
 
 describe("runTutorTurn", () => {
   it("returns the model's segments when they pass the filter", async () => {
-    const client = fakeClient({
-      stop_reason: "end_turn",
+    const model = fakeModel({
+      complete: true,
       text: JSON.stringify({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }] }),
     });
-    const result = await runTutorTurn(claudeModel(client), turn);
+    const result = await runTutorTurn(model, turn);
     expect(result).toEqual({ segments: [{ lang: "id", text: "Betul, ada tiga apel!" }], fallbackUsed: false });
   });
 
-  it("uses the prepared line on a refusal", async () => {
-    const result = await runTutorTurn(claudeModel(fakeClient({ stop_reason: "refusal", text: "" })), turn);
+  it("uses the prepared line when the reply is cut off", async () => {
+    const result = await runTutorTurn(fakeModel({ complete: false, text: "" }), turn);
     expect(result).toEqual({ segments: FALLBACK_LINES.praise, fallbackUsed: true });
   });
 
   it("uses the prepared line when the API call fails", async () => {
-    const result = await runTutorTurn(claudeModel(fakeClient(new Error("network"))), turn);
+    const result = await runTutorTurn(fakeModel(new Error("network")), turn);
     expect(result.fallbackUsed).toBe(true);
   });
 
   it("uses the prepared line on malformed JSON", async () => {
-    const result = await runTutorTurn(claudeModel(fakeClient({ stop_reason: "end_turn", text: "{oops" })), turn);
+    const result = await runTutorTurn(fakeModel({ complete: true, text: "{oops" }), turn);
     expect(result.segments).toEqual(FALLBACK_LINES.praise);
   });
 });
@@ -228,7 +217,7 @@ describe("withFallback", () => {
 });
 
 describe("routes", () => {
-  const env = { ANTHROPIC_API_KEY: "k", GOOGLE_CLOUD_API_KEY: "g", APP_TOKEN: "secret" };
+  const env = { SUMOPOD_API_KEY: "k", GOOGLE_CLOUD_API_KEY: "g", APP_TOKEN: "secret" };
 
   it("serves health without a token", async () => {
     const response = await app.request("/health", {}, env);
