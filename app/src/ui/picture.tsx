@@ -385,8 +385,19 @@ export const Illustration = ({ kind, size = 148 }: { kind: IllustrationKind; siz
   );
 };
 
-const ObjectRow = ({ kind, count, size }: { kind: ObjectKind; count: number; size: number }) => (
-  <View style={styles.group}>
+const ObjectRow = ({
+  kind,
+  count,
+  size,
+  wrap = false,
+}: {
+  kind: ObjectKind;
+  count: number;
+  size: number;
+  /** Inside the compare card each side owns half the width and wraps instead of overflowing. */
+  wrap?: boolean;
+}) => (
+  <View style={[styles.group, wrap && styles.groupWrap]}>
     {Array.from({ length: count }, (_, index) => (
       <ObjectShape key={index} kind={kind} size={size} />
     ))}
@@ -420,12 +431,14 @@ export const PictureView = ({ picture, compact = false }: { picture: Picture; co
             kind={picture.object}
             count={picture.left}
             size={sizeFor(Math.max(picture.left, picture.right) * 2, compact)}
+            wrap
           />
           <View style={styles.divider} />
           <ObjectRow
             kind={picture.rightObject}
             count={picture.right}
             size={sizeFor(Math.max(picture.left, picture.right) * 2, compact)}
+            wrap
           />
         </View>
       );
@@ -467,6 +480,7 @@ export const PictureView = ({ picture, compact = false }: { picture: Picture; co
 
 const styles = StyleSheet.create({
   group: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 6, maxWidth: 300 },
+  groupWrap: { flex: 1, maxWidth: undefined, alignSelf: "stretch" },
   compare: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.md },
   divider: { width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: colors.pictureBorder },
   sum: { alignItems: "center", gap: spacing.sm },

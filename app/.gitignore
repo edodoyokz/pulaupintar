@@ -42,3 +42,6 @@ example
 /ios
 /android
 .env
+
+# Rive builder scratch files (part SVGs, scene spec, previews)
+/rive/.build/

@@ -166,8 +166,7 @@ const Session = ({
   const micSize = compact ? 96 : 112;
   const tutorMood: KakPintaMood =
     session.phase === "listening" ? "listen" : session.phase === "checking" ? "think" : "talk";
-  const tutorAnimated =
-    session.phase === "speaking" || session.phase === "listening" || session.phase === "checking";
+  const tutorReaction = session.feedback === "none" ? undefined : session.feedback;
 
   const hintText = listening
     ? "Bicara sekarang, lalu tekan kotak merah"
@@ -207,7 +206,11 @@ const Session = ({
                 : session.caption || "Kak Pinta siap mengajar!"}
             </Text>
           </View>
-          <KakPinta size={compact ? 116 : 148} mood={tutorMood} animated={tutorAnimated} />
+          <KakPinta
+            size={compact ? 116 : 148}
+            mood={tutorMood}
+            reaction={tutorReaction}
+          />
           {(session.heard !== "" || session.feedback !== "none") && (
             <View style={styles.statusPills}>
               {session.feedback === "correct" && (

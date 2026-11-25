@@ -1,6 +1,7 @@
 import { AudioManager, AudioRecorder } from "react-native-audio-api";
 import { bytesToBase64, floatToPcm16, type LiveServerMessage } from "./pcm";
 import { openLiveConnection, type LiveConnection } from "./socket";
+import { levelFromSamples, setAudioLevel } from "./levels";
 import type { ListenHints } from "@/api/types";
 
 const INPUT_RATE = 16_000;
@@ -93,7 +94,10 @@ export class LiveListener {
     const recorder = new AudioRecorder();
     this.recorder = recorder;
     recorder.onAudioReady({ sampleRate: INPUT_RATE, bufferLength: CHUNK_SAMPLES, channelCount: 1 }, ({ buffer }) => {
-      const data = bytesToBase64(floatToPcm16(buffer.getChannelData(0)));
+      const samples = buffer.getChannelData(0);
+      // Kak Pinta leans in while the child is speaking.
+      setAudioLevel("listen", levelFromSamples(samples));
+      const data = bytesToBase64(floatToPcm16(samples));
       if (this.live) this.live.send(audioMessage(data));
       else this.waiting.push(data);
     });
@@ -140,6 +144,7 @@ export class LiveListener {
     this.recorder = null;
     if (!recorder) return;
     recorder.clearOnAudioReady();
+    setAudioLevel("listen", 0);
     await recorder.stop().catch(() => undefined);
   }
 

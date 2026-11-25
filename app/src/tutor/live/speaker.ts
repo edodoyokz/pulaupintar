@@ -2,6 +2,7 @@ import { AudioContext, type AudioBufferQueueSourceNode } from "react-native-audi
 import type { SpeechSegment } from "@/api/types";
 import { openLiveConnection, type LiveConnection } from "./socket";
 import { base64ToBytes, pcm16ToFloat, type LiveServerMessage } from "./pcm";
+import { meterAnalyser } from "./levels";
 
 const OUTPUT_RATE = 24_000;
 /** Audio waiting before playback starts, so a slow chunk does not make the voice stutter. */
@@ -61,8 +62,12 @@ export class LiveSpeaker {
     if (epoch !== this.epoch) return this.closeIfIdle();
 
     await new Promise<void>((resolve, reject) => {
+      // The mouth follows what is actually playing, so it opens on syllables and closes on pauses.
+      const analyser = context.createAnalyser();
+      const stopMeter = meterAnalyser("speech", analyser);
       const source: AudioBufferQueueSourceNode = context.createBufferQueueSource();
-      source.connect(context.destination);
+      source.connect(analyser);
+      analyser.connect(context.destination);
       let queuedSeconds = 0;
       let queuedBuffers = 0;
       let endedBuffers = 0;
@@ -76,6 +81,7 @@ export class LiveSpeaker {
         settled = true;
         clearTimeout(turnTimer);
         clearTimeout(endTimer);
+        stopMeter();
         this.cancel = null;
         this.failTurn = null;
         this.onMessage = () => undefined;
