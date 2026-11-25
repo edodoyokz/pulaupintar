@@ -1,0 +1,6 @@
+ANTHROPIC_API_KEY=
+GOOGLE_CLOUD_API_KEY=
+APP_TOKEN=
+# Optional: a specific Google voice name per language
+TTS_VOICE_ID=
+TTS_VOICE_EN=
