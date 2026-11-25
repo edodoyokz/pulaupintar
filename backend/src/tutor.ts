@@ -3,7 +3,7 @@ import { FALLBACK_LINES, filterSegments } from "./safety";
 import type { SpeechSegment, TutorTurnRequest, TutorTurnResponse } from "./types";
 
 const CLAUDE_MODEL = "claude-opus-5-5";
-export const DEFAULT_POLLINATIONS_MODEL = "openai/gpt-5.4-nano";
+export const DEFAULT_POLLINATIONS_MODEL = "openai/gpt-5-nano";
 const POLLINATIONS_URL = "https://gen.pollinations.ai/v1/chat/completions";
 
 /** What the tutor needs from any LLM: JSON text, and whether the model finished normally. */

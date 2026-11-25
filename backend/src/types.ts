@@ -2,7 +2,7 @@ export type Env = {
   /** Which LLM writes Kak Pinta's lines: "pollinations" (default, GPT-5 Nano) or "claude". */
   TUTOR_PROVIDER?: "pollinations" | "claude";
   POLLINATIONS_API_KEY?: string;
-  /** Pollinations model id; defaults to openai/gpt-5.4-nano. */
+  /** Pollinations model id; defaults to openai/gpt-5-nano. */
   TUTOR_MODEL?: string;
   /** Optional reasoning_effort sent to Pollinations, e.g. "low". */
   TUTOR_REASONING_EFFORT?: string;

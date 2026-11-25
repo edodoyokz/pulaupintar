@@ -94,7 +94,7 @@ describe("pollinationsModel", () => {
       sent = { url, init };
       return new Response(
         JSON.stringify({
-          model: "openai/gpt-5.4-nano",
+          model: "openai/gpt-5-nano",
           choices: [{ message: { content: JSON.stringify({ segments: [{ lang: "id", text: "Betul!" }] }) }, finish_reason: "stop" }],
           usage: { prompt_tokens: 100, completion_tokens: 10 },
         }),
@@ -106,7 +106,7 @@ describe("pollinationsModel", () => {
     expect(sent!.url).toBe("https://gen.pollinations.ai/v1/chat/completions");
     expect((sent!.init.headers as Record<string, string>).authorization).toBe("Bearer sk_test");
     const body = JSON.parse(String(sent!.init.body));
-    expect(body.model).toBe("openai/gpt-5.4-nano");
+    expect(body.model).toBe("openai/gpt-5-nano");
     expect(body.reasoning_effort).toBe("low");
     expect(body.response_format.json_schema.strict).toBe(true);
   });
