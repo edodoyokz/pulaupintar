@@ -13,6 +13,8 @@ const END_GRACE_MS = 3_000;
  * Kak Pinta's voice: Gemini Live speaks each line and its audio plays while it is still arriving.
  * The session only reads lines aloud (the Worker relay only passes approved lines), and a stopped line closes the socket
  * so nothing queued behind it can still be heard.
+ * Every line gets its own session, closed as soon as Gemini has sent the whole line: a session left idle through the
+ * Worker is dropped by Gemini after about 10 s, and a fresh one carries no earlier lines the model could answer.
  */
 export class LiveSpeaker {
   private context: AudioContext | null = null;
@@ -131,6 +133,9 @@ export class LiveSpeaker {
         startIfReady();
         if (content?.turnComplete) {
           turnDone = true;
+          // The whole line has arrived; free the session now instead of letting it idle until Gemini drops it.
+          if (this.connection === connection) this.connection = null;
+          connection.close();
           if (queuedBuffers === 0) finish(new Error("live sent no audio"));
           else {
             startIfReady();
