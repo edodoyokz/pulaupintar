@@ -9,7 +9,7 @@ Spesifikasi produk dan kurikulum: lihat dokumen "Pulaupintar — Spesifikasi Tut
 | Folder | Isi |
 | --- | --- |
 | `app/` | Aplikasi HP (Expo SDK 58, Expo Router, TypeScript) |
-| `backend/` | Cloudflare Worker (Hono) yang menyimpan API key dan memanggil LLM (utama Sumopod hy4-flash, cadangan Pollinations; cek keamanan jev-1.14.0 dengan cadangan qwen3guard), text-to-speech, dan speech-to-text |
+| `backend/` | Cloudflare Worker (Hono) yang menyimpan API key dan memanggil LLM lewat Sumopod (utama `deepseek-v4.1-flash:netra` tanpa reasoning, cadangan `claude-haiku-5-5`; cek keamanan `jev-1.13.0` dengan cadangan `claude-haiku-5-5`), text-to-speech (`gemini-3.8-live`), dan speech-to-text (`gemini-3.5-transcribe-live` / `gemini-3.5-transcribe`) |
 
 Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menekan mikrofon dan menjawab (rekam → STT), lalu aplikasi menilai jawaban dari kunci jawaban (bukan LLM) dan meminta tutor memuji, memberi petunjuk, atau menunjukkan jawaban.
 
@@ -18,12 +18,12 @@ Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menek
 ```bash
 cd backend
 npm install
-cp .dev.vars.example .dev.vars   # isi GEMINI_API_KEY, APP_TOKEN (SUMOPOD_API_KEY dan POLLINATIONS_API_KEY untuk cadangan)
+cp .dev.vars.example .dev.vars   # isi SUMOPOD_API_KEY (menulis dan memeriksa kalimat), GEMINI_API_KEY (suara), APP_TOKEN
 npm run dev                      # http://localhost:8787
 npm test
 ```
 
-- Suara memakai Gemini: `GEMINI_API_KEY` menulis kalimat, memeriksa keamanan, dan meneruskan suara lewat Worker (`/v1/live/speak` dan `/v1/live/listen`, websocket) ke Gemini Live 3.8 (bicara) dan Gemini 3.5 Transcribe Live (mendengar). Aplikasi tidak memegang kunci atau token Gemini, dan setiap kalimat yang diucapkan melewati pemeriksaan yang sama dengan `/v1/tts`.
+- Suara memakai Gemini: `GEMINI_API_KEY` meneruskan suara lewat Worker (`/v1/live/speak` dan `/v1/live/listen`, websocket) ke Gemini Live 3.8 (bicara) dan Gemini 3.5 Transcribe Live (mendengar). Kalimat Kak Pinta ditulis dan diperiksa lewat Sumopod (`SUMOPOD_API_KEY`). Aplikasi tidak memegang kunci atau token Gemini, dan setiap kalimat yang diucapkan melewati pemeriksaan yang sama dengan `/v1/tts`.
 - Aplikasi memakai modul audio native (`react-native-audio-api`), jadi butuh development build, bukan Expo Go. Expo sendiri tidak menyediakan pemutaran PCM mentah yang di-stream, makanya library ini dipakai untuk suara dan mikrofon. Tanpa itu (atau dengan `EXPO_PUBLIC_VOICE=rest`) aplikasi memakai `/v1/tts` dan `/v1/stt` yang juga Gemini.
 - Untuk kembali ke Google Cloud TTS/STT: set `SPEECH_PROVIDER=google`, isi `GOOGLE_CLOUD_API_KEY` (Cloud Text-to-Speech dan Speech-to-Text API aktif), dan `EXPO_PUBLIC_VOICE=rest` serta `EXPO_PUBLIC_SPEECH=google` di aplikasi (Android lalu merekam AMR-WB, bukan AAC).
 - **Penting:** Ketentuan Gemini API melarang aplikasi yang ditujukan atau kemungkinan dipakai anak di bawah 18 tahun, dan di tier gratis data dipakai Google untuk meningkatkan produknya (peninjau manusia bisa membacanya). Pakai kunci dari proyek berbayar, dan periksa ketentuan sebelum dipakai anak lain.

@@ -6,20 +6,22 @@
   "observability": { "enabled": true },
   // Non-secret settings. API keys go in secrets: npx wrangler secret put GEMINI_API_KEY (and SUMOPOD_API_KEY, POLLINATIONS_API_KEY)
   "vars": {
-    // Gemini does everything: it writes Kak Pinta's lines, checks them, and (SPEECH_PROVIDER) speaks and hears.
-    // The app streams voice through the Worker (/v1/live/speak and /v1/live/listen) to Gemini Live 3.8, which checks every line;
-    // /v1/tts and /v1/stt (also Gemini) are the fallback when streaming isn't available.
-    "TUTOR_PROVIDER": "gemini",
-    "TUTOR_MODEL": "gemini-3.1-flash-lite",
-    "SAFETY_PROVIDER": "gemini",
-    "SAFETY_MODEL": "gemini-3.1-flash-lite",
+    // Sumopod writes Kak Pinta's lines (deepseek-v4.1-flash:netra, reasoning off) and checks them (jev-1.13.0, TypeSafe's decision model,
+    // called at Sumopod's /v1/systemone). Gemini (SPEECH_PROVIDER) speaks and hears: the app streams voice through
+    // the Worker (/v1/live/speak and /v1/live/listen) to Gemini Live 3.8; /v1/tts and /v1/stt (also Gemini) are the
+    // fallback when streaming isn't available. Time limits per call are in backend/src/tutor.ts.
+    "TUTOR_PROVIDER": "sumopod",
+    "TUTOR_MODEL": "deepseek-v4.1-flash:netra",
+    "TUTOR_REASONING_EFFORT": "none",
+    "SAFETY_PROVIDER": "sumopod",
+    "SAFETY_MODEL": "jev-1.13.0",
     "SPEECH_PROVIDER": "gemini",
     "GEMINI_LIVE_MODEL": "gemini-3.8-live",
     "GEMINI_LISTEN_MODEL": "gemini-3.5-transcribe-live",
-    // Backups when Gemini errors, is slow (tutor over 4 s, safety over 2.5 s) or returns a cut-off reply.
+    // Backups when the main model errors, is slow or returns a cut-off reply.
     "TUTOR_FALLBACK_PROVIDER": "sumopod",
-    "TUTOR_FALLBACK_MODEL": "gemini/gemini-3.1-flash-lite",
-    "SAFETY_FALLBACK_PROVIDER": "pollinations",
-    "SAFETY_FALLBACK_MODEL": "qwen/qwen3guard-gen-8b"
+    "TUTOR_FALLBACK_MODEL": "claude-haiku-5-5",
+    "SAFETY_FALLBACK_PROVIDER": "sumopod",
+    "SAFETY_FALLBACK_MODEL": "claude-haiku-5-5"
   }
 }

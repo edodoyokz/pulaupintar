@@ -10,8 +10,14 @@ export const OPENAI_COMPATIBLE_PROVIDERS = {
   gemini: { url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-3.1-flash-lite" },
 } as const;
 
-export const TUTOR_CALL_TIMEOUT_MS = 4_000;
+/** The main writer (deepseek-v4.1-flash:netra on Sumopod, reasoning off) takes 0.6-2 s; slower spikes go to the backup. */
+export const TUTOR_CALL_TIMEOUT_MS = 5_000;
+/** The backup writer (claude-haiku-5-5 on Sumopod) takes about 5 s. */
+export const TUTOR_BACKUP_TIMEOUT_MS = 9_000;
+/** The main checker (jev-1.13.0 on Sumopod) answers in about 1 s. */
 export const SAFETY_CALL_TIMEOUT_MS = 2_500;
+/** The backup checker (claude-haiku-5-5 on Sumopod) answers in under 2 s. */
+export const SAFETY_BACKUP_TIMEOUT_MS = 5_000;
 
 export type OpenAiCompatibleProvider = keyof typeof OPENAI_COMPATIBLE_PROVIDERS;
 
@@ -24,7 +30,9 @@ const SUBJECT_NAMES = {
   inggris: "Bahasa Inggris",
 } as const;
 
-// Kept byte-stable so it caches across every turn of every session.
+// Kept byte-stable so it caches across every turn of every session. Sumopod caches whole 256-token blocks of the
+// prompt prefix, and the JSON schema it adds goes after the turn, so this prompt alone should end just past a
+// multiple of 256 tokens (now about 1077; 1024 cached). Check cachedInputTokens in the cost logs after editing it.
 const SYSTEM_PROMPT = `Kamu adalah Kak Pinta, tutor suara yang ceria dan sabar di aplikasi belajar Pulaupintar untuk anak usia 4-7 tahun.
 
 Semua yang kamu tulis akan langsung diucapkan oleh suara ke anak. Karena itu:
@@ -45,7 +53,25 @@ Jenis giliran:
 - praise: jawaban anak benar. Puji dengan spesifik dan ulangi jawabannya.
 - hint: jawaban anak belum benar. Beri satu petunjuk kecil tanpa menyebut jawabannya, lalu ajak mencoba lagi.
 - reveal: anak sudah mencoba dua kali. Tunjukkan jawabannya bersama-sama dengan lembut, tanpa kata "salah".
-- wrapup: sesi selesai. Rayakan usaha anak dan sebut satu hal yang sudah ia pelajari.`;
+- wrapup: sesi selesai. Rayakan usaha anak dan sebut satu hal yang sudah ia pelajari.
+
+Contoh harus benar. Periksa setiap angka dan kata sebelum menulis:
+- Berhitung: hasil hitungan harus tepat. Pakai benda sehari-hari seperti apel, permen, jari, atau bola, dan angka sesuai pelajaran. Saat menghitung lanjut, sebut angkanya berurutan dan berhenti tepat di jawaban, misalnya dua tambah tiga: tiga, empat, lima.
+- Membaca: kata contoh harus benar-benar memuat huruf atau suku kata yang diajarkan, misalnya a pada ayam, i pada ikan, u pada ular, e pada ember, o pada obor, ba pada bola, bu pada buku.
+- Bahasa Inggris: pakai kata yang paling umum, satu kata baru per giliran, dan sebut artinya dalam Bahasa Indonesia.
+- Hint tidak boleh menyebut jawaban, juga tidak boleh menghitung sampai ke jawaban.
+
+Contoh keluaran yang baik:
+- teach, Berhitung, menambah: "Ayo belajar menambah." "Kamu punya dua apel, lalu dapat satu lagi." "Sekarang apelnya ada tiga."
+- teach, Membaca, huruf vokal: "Ayo kenali huruf a." "Dengar kata ayam, bunyinya a, a, ayam." "Huruf a ada di awal kata ayam."
+- teach, Bahasa Inggris, hewan: "Ini hewan yang suka mengeong." "Dalam Bahasa Inggris, kucing disebut" lalu segmen en "cat".
+- hint, dua tambah tiga, anak menjawab empat: "Hampir, ayo pakai jari." "Angkat dua jari, lalu tambah tiga jari." "Hitung semuanya pelan-pelan, ya."
+- reveal, jawaban tujuh: "Tidak apa-apa, kita lihat bersama." "Angka ini namanya tujuh." "Ayo ucapkan bersama, tujuh."
+- praise, Bahasa Inggris, jawaban red: "Hebat, jawabanmu benar!" "Merah dalam Bahasa Inggris adalah" lalu segmen en "red".
+- wrapup, Berhitung: "Kerja bagus hari ini." "Kamu sudah bisa menambah sampai sepuluh." "Sampai jumpa lagi, ya."
+- teach, Berhitung, mengurangi: "Kamu punya lima permen." "Dua permen kamu makan." "Sisanya tinggal tiga permen."
+- ask, Berhitung, angka di layar: "Lihat angka di layar, ya." "Angka berapa ini?"
+- teach, Membaca, suku kata: "Ayo baca suku kata ba." "Dengar kata bola, bo, la." "Sekarang kita baca ba, bi, bu, be, bo."`;
 
 const OUTPUT_SCHEMA = {
   type: "object",
@@ -103,7 +129,7 @@ export const parseSegments = (text: string): SpeechSegment[] => {
 type ChatCompletion = {
   model?: string;
   choices?: { message?: { content?: string | null }; finish_reason?: string }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
 };
 
 /** Any OpenAI-compatible Chat Completions API (Pollinations, Sumopod), e.g. GPT-5 Nano. */
@@ -123,7 +149,7 @@ export const openAiCompatibleModel =
     const doFetch = options.fetch ?? fetch;
     const response = await doFetch(provider.url, {
       method: "POST",
-      // Budget per turn, under the app's 15 s limit: tutor 4 s + backup 4 s + guard 2.5 s + backup 2.5 s.
+      // Budget per turn, under the app's 23 s limit: tutor 5 s + backup 9 s + guard 2.5 s + backup 5 s.
       signal: AbortSignal.timeout(options.timeoutMs ?? TUTOR_CALL_TIMEOUT_MS),
       headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
@@ -149,6 +175,7 @@ export const openAiCompatibleModel =
         provider: options.provider,
         model: completion.model,
         inputTokens: completion.usage?.prompt_tokens,
+        cachedInputTokens: completion.usage?.prompt_tokens_details?.cached_tokens,
         outputTokens: completion.usage?.completion_tokens,
       }),
     );
@@ -244,12 +271,63 @@ export const qwenGuardModel =
         provider: options.provider,
         model: completion.model,
         inputTokens: completion.usage?.prompt_tokens,
+        cachedInputTokens: completion.usage?.prompt_tokens_details?.cached_tokens,
         outputTokens: completion.usage?.completion_tokens,
       }),
     );
     const verdict = /Safety:\s*(Safe|Unsafe|Controversial)/i.exec(completion.choices?.[0]?.message?.content ?? "")?.[1];
     if (!verdict) return { text: "", complete: false };
     return { text: JSON.stringify({ safe: verdict.toLowerCase() === "safe" }), complete: true };
+  };
+
+/** Jev's answer is the probability that the lines are safe; anything below this is blocked. */
+export const JEV_SAFE_THRESHOLD = 0.8;
+
+const JEV_SAFE_QUESTION = {
+  type: "noul",
+  instructions: "A voice tutor will speak these lines to a child aged 4 to 7 in a learning app. Are all of the lines safe to speak?",
+  criteria: {
+    true: "Every line is kind, encouraging and age-appropriate; no insults, shaming, fear or comparison with other children; no violence, sexual content, death, drugs or horror; no request for personal data, contact details, location or photos; no links, other apps, brands, ads or purchases; stays on a children's learning topic.",
+    false: "Any line breaks one of those rules.",
+  },
+};
+
+/**
+ * TypeSafe Jev (e.g. jev-1.13.0) as a safety checker. It is a decision model, not a chat model:
+ * it is served at /v1/systemone (on Sumopod next to the chat endpoint) and answers a yes/no
+ * ("noul") question with a probability. The same rules as SAFETY_PROMPT go in the question;
+ * the answer is turned into {"safe": ...} so it plugs into safetyGuard like any other model.
+ */
+export const jevGuardModel =
+  (options: { provider: OpenAiCompatibleProvider; apiKey: string; model: string; fetch?: typeof fetch; timeoutMs?: number }): TutorModel =>
+  async (_system, lines) => {
+    const url = OPENAI_COMPATIBLE_PROVIDERS[options.provider].url.replace(/chat\/completions$/, "systemone");
+    const response = await (options.fetch ?? fetch)(url, {
+      method: "POST",
+      signal: AbortSignal.timeout(options.timeoutMs ?? SAFETY_CALL_TIMEOUT_MS),
+      headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
+      // The lines are the state Jev judges; they are never read as instructions.
+      body: JSON.stringify({ model: options.model, state: lines, questions: { safe: JEV_SAFE_QUESTION } }),
+    });
+    if (!response.ok) throw new Error(`${options.provider} jev ${response.status}`);
+    const decision = (await response.json()) as {
+      model?: string;
+      answers?: { safe?: { noul?: unknown } };
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    console.log(
+      JSON.stringify({
+        event: "cost",
+        kind: "safety",
+        provider: options.provider,
+        model: decision.model,
+        inputTokens: decision.usage?.input_tokens,
+        outputTokens: decision.usage?.output_tokens,
+      }),
+    );
+    const noul = decision.answers?.safe?.noul;
+    if (typeof noul !== "number") return { text: "", complete: false };
+    return { text: JSON.stringify({ safe: noul >= JEV_SAFE_THRESHOLD }), complete: true };
   };
 
 /**

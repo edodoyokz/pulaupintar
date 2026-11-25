@@ -7,9 +7,12 @@ import {
   openAiCompatibleModel,
   isSafetyReply,
   isTutorReply,
+  jevGuardModel,
   qwenGuardModel,
   runTutorTurn,
+  SAFETY_BACKUP_TIMEOUT_MS,
   SAFETY_CALL_TIMEOUT_MS,
+  TUTOR_BACKUP_TIMEOUT_MS,
   SAFETY_OUTPUT_SCHEMA,
   safetyGuard,
   withFallback,
@@ -35,7 +38,7 @@ const tutorBackup = (env: Env): TutorModel | undefined => {
     provider,
     apiKey: apiKeyFor(env, provider),
     model: env.TUTOR_FALLBACK_MODEL,
-    reasoningEffort: env.TUTOR_REASONING_EFFORT,
+    timeoutMs: TUTOR_BACKUP_TIMEOUT_MS,
   });
 };
 
@@ -51,27 +54,22 @@ const tutorModelFor = (env: Env): TutorModel => {
   return withFallback(primary, backup, isTutorReply);
 };
 
-/** Backup safety checker; a Qwen3Guard model is called in its own classifier format. */
-const safetyBackup = (env: Env): TutorModel | undefined => {
-  const provider = env.SAFETY_FALLBACK_PROVIDER;
-  const model = env.SAFETY_FALLBACK_MODEL;
-  if (!provider) return undefined;
+/** A safety checker; Qwen3Guard and Jev models are called in their own formats. */
+const safetyChecker = (env: Env, provider: OpenAiCompatibleProvider, model: string | undefined, timeoutMs: number): TutorModel => {
   const apiKey = apiKeyFor(env, provider);
-  if (model?.toLowerCase().includes("qwen3guard")) return qwenGuardModel({ provider, apiKey, model });
-  return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs: SAFETY_CALL_TIMEOUT_MS });
+  if (model?.toLowerCase().includes("qwen3guard")) return qwenGuardModel({ provider, apiKey, model, timeoutMs });
+  if (model?.toLowerCase().startsWith("jev-")) return jevGuardModel({ provider, apiKey, model, timeoutMs });
+  return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs });
 };
 
 const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
   if (!env.SAFETY_MODEL) return undefined;
-  const provider = providerOrDefault(env, env.SAFETY_PROVIDER);
-  const primary = openAiCompatibleModel({
-    provider,
-    apiKey: apiKeyFor(env, provider),
-    model: env.SAFETY_MODEL,
-    schema: SAFETY_OUTPUT_SCHEMA,
-    timeoutMs: SAFETY_CALL_TIMEOUT_MS,
-  });
-  return safetyGuard(withFallback(primary, safetyBackup(env), isSafetyReply));
+  const primary = safetyChecker(env, providerOrDefault(env, env.SAFETY_PROVIDER), env.SAFETY_MODEL, SAFETY_CALL_TIMEOUT_MS);
+  const backupProvider = env.SAFETY_FALLBACK_PROVIDER;
+  const backup = backupProvider
+    ? safetyChecker(env, backupProvider, env.SAFETY_FALLBACK_MODEL, SAFETY_BACKUP_TIMEOUT_MS)
+    : undefined;
+  return safetyGuard(withFallback(primary, backup, isSafetyReply));
 };
 
 const app = new Hono<{ Bindings: Env }>();

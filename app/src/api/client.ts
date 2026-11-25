@@ -2,7 +2,8 @@ import type { SpeechSegment, SttRequest, TutorTurnRequest, TutorTurnResponse } f
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8787";
 const APP_TOKEN = process.env.EXPO_PUBLIC_APP_TOKEN ?? "";
-const TIMEOUT_MS = 15_000;
+// Covers the Worker's worst case when every model falls back (about 21.5 s, see backend/src/tutor.ts).
+const TIMEOUT_MS = 23_000;
 
 const post = async <T>(path: string, body: unknown): Promise<T> => {
   const controller = new AbortController();

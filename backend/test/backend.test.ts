@@ -4,6 +4,7 @@ import { FALLBACK_LINES, filterSegments } from "../src/safety";
 import {
   openAiCompatibleModel,
   isSafetyReply,
+  jevGuardModel,
   qwenGuardModel,
   runTutorTurn,
   safetyGuard,
@@ -177,6 +178,41 @@ describe("qwenGuardModel", () => {
     ["I am not sure", false],
   ])("reads %j as safe=%s", async (content, safe) => {
     expect(await guardSaying(content)(lines)).toBe(safe);
+  });
+});
+
+describe("jevGuardModel", () => {
+  const lines = [{ lang: "id" as const, text: "Hebat, Aya!" }];
+  const guardAnswering = (body: unknown, seen: string[] = []) =>
+    safetyGuard(
+      jevGuardModel({
+        provider: "sumopod",
+        apiKey: "k",
+        model: "jev-1.13.0",
+        fetch: (async (url: string) => {
+          seen.push(url);
+          return new Response(JSON.stringify(body));
+        }) as unknown as typeof fetch,
+      }),
+    );
+
+  it("asks Sumopod's decision endpoint, not chat completions", async () => {
+    const seen: string[] = [];
+    await guardAnswering({ answers: { safe: { type: "noul", noul: 0.97 } } }, seen)(lines);
+    expect(seen).toEqual(["https://ai.sumopod.com/v1/systemone"]);
+  });
+
+  it.each([
+    [0.97, true],
+    [0.8, true],
+    [0.6, false],
+    [0.02, false],
+  ])("reads noul %s as safe=%s", async (noul, safe) => {
+    expect(await guardAnswering({ answers: { safe: { type: "noul", noul } } })(lines)).toBe(safe);
+  });
+
+  it("blocks when the answer is missing", async () => {
+    expect(await guardAnswering({ error: "bad request" })(lines)).toBe(false);
   });
 });
 

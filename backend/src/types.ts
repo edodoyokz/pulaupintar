@@ -7,7 +7,7 @@ export type Env = {
   SUMOPOD_API_KEY?: string;
   /** Model id at the chosen provider; defaults to GPT-5 Nano (openai/gpt-5-nano on Pollinations, gpt-5-nano on Sumopod). */
   TUTOR_MODEL?: string;
-  /** Optional reasoning_effort for Pollinations or Sumopod, e.g. "low". */
+  /** Optional reasoning_effort for the main tutor model only (not its backup), e.g. "none" or "low". */
   TUTOR_REASONING_EFFORT?: string;
   /**
    * Optional second model that checks each line before a child hears it, e.g. "jev-1.14.0".
