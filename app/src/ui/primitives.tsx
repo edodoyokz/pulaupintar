@@ -29,13 +29,22 @@ export const CircleButton = ({
   onPress,
   children,
   style,
+  disabled = false,
 }: {
   label: string;
   onPress: () => void;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  disabled?: boolean;
 }) => (
-  <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.circle, style]}>
+  <Pressable
+    onPress={onPress}
+    disabled={disabled}
+    accessibilityRole="button"
+    accessibilityLabel={label}
+    accessibilityState={{ disabled }}
+    style={[styles.circle, style]}
+  >
     {children}
   </Pressable>
 );

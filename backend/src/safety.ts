@@ -45,3 +45,19 @@ export const filterSegments = (
   }
   return { segments: FALLBACK_LINES[kind], passed: false };
 };
+
+const isSpeechSegment = (value: unknown): value is SpeechSegment =>
+  typeof value === "object" &&
+  value !== null &&
+  ((value as SpeechSegment).lang === "id" || (value as SpeechSegment).lang === "en") &&
+  typeof (value as SpeechSegment).text === "string";
+
+/**
+ * Checks text sent to /v1/tts before it costs money or is spoken as Kak Pinta.
+ * Same limits and word filters as the tutor's own lines; returns null when anything fails.
+ */
+export const validateSpeechRequest = (segments: unknown): SpeechSegment[] | null => {
+  if (!Array.isArray(segments) || !segments.every(isSpeechSegment)) return null;
+  const { segments: cleaned, passed } = filterSegments(segments, "ask");
+  return passed ? cleaned : null;
+};
