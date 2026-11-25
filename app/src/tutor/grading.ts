@@ -33,9 +33,9 @@ const toWords = (text: string, lang: Lang): string[] => {
   return normalized.trim().split(" ").filter(Boolean);
 };
 
-export const normalizeAnswer = (text: string, lang: Lang = "id"): string => {
+export const normalizeAnswer = (text: string, lang: Lang = "id", keepWords?: Set<string>): string => {
   const words = toWords(text, lang);
-  const content = words.filter((word) => !FILLER_WORDS.has(word));
+  const content = words.filter((word) => keepWords?.has(word) || !FILLER_WORDS.has(word));
   return (content.length > 0 ? content : words).join(" ");
 };
 
@@ -60,9 +60,10 @@ export const isCorrectAnswer = (
   otherAnswers: string[] = [],
   lang: Lang = "id",
 ): boolean => {
-  const said = normalizeAnswer(childSaid, lang);
-  if (said === "") return false;
   const expected = answers.map((answer) => toWords(answer, lang).join(" ")).filter(Boolean);
+  const expectedWords = new Set(expected.flatMap((answer) => answer.split(" ")));
+  const said = normalizeAnswer(childSaid, lang, expectedWords);
+  if (said === "") return false;
 
   const numericAnswers = expected.filter(isNumber);
   if (numericAnswers.length > 0) {

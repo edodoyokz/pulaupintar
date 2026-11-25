@@ -6,6 +6,7 @@ const INPUT_RATE = 16_000;
 /** 100 ms of audio per chunk. */
 const CHUNK_SAMPLES = 1_600;
 const FINAL_TIMEOUT_MS = 4_000;
+const SETTLE_AFTER_TRANSCRIPT_MS = 450;
 
 const audioMessage = (data: string) => ({ realtimeInput: { audio: { data, mimeType: `audio/pcm;rate=${INPUT_RATE}` } } });
 
@@ -23,24 +24,55 @@ export class LiveListener {
   private interimText = "";
   /** Set when the socket closes. A close before any transcript is a failure, not a wrong answer. */
   private closed = false;
-  private onTranscript: (() => void) | null = null;
+  private stopping = false;
+  private settleResolve: (() => void) | null = null;
+  private deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
 
   static async requestPermission(): Promise<boolean> {
     return (await AudioManager.requestRecordingPermissions()) === "Granted";
   }
 
+  private clearWaitTimers() {
+    if (this.deadlineTimer) {
+      clearTimeout(this.deadlineTimer);
+      this.deadlineTimer = null;
+    }
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
+  }
+
+  private resolveWait() {
+    this.clearWaitTimers();
+    this.stopping = false;
+    const resolve = this.settleResolve;
+    this.settleResolve = null;
+    resolve?.();
+  }
+
+  private armSettleTimer() {
+    if (!this.stopping || !this.settleResolve) return;
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => this.resolveWait(), SETTLE_AFTER_TRANSCRIPT_MS);
+  }
+
   /** Opens the session while the recorder starts, so the child can talk right away. */
   async start() {
+    this.clearWaitTimers();
     this.finalText = "";
     this.interimText = "";
     this.closed = false;
+    this.stopping = false;
+    this.settleResolve = null;
     this.waiting = [];
     this.live = null;
     const opening = openLiveConnection("listen", {
       onMessage: (message) => this.handle(message),
       onClose: () => {
         this.closed = true;
-        this.onTranscript?.();
+        this.resolveWait();
       },
     });
     this.opening = opening;
@@ -71,13 +103,16 @@ export class LiveListener {
     this.opening = null;
     if (!connection) throw new Error("no live session");
     for (const data of this.waiting.splice(0)) connection.send(audioMessage(data));
-    const finished = new Promise<void>((resolve) => {
-      this.onTranscript = resolve;
-      setTimeout(resolve, FINAL_TIMEOUT_MS);
-    });
-    connection.send({ realtimeInput: { audioStreamEnd: true } });
-    await finished;
-    this.onTranscript = null;
+    if (!this.closed) {
+      this.stopping = true;
+      const finished = new Promise<void>((resolve) => {
+        this.settleResolve = resolve;
+        this.deadlineTimer = setTimeout(() => this.resolveWait(), FINAL_TIMEOUT_MS);
+        if (this.finalText !== "") this.armSettleTimer();
+      });
+      connection.send({ realtimeInput: { audioStreamEnd: true } });
+      await finished;
+    }
     connection.close();
     this.live = null;
     const text = (this.finalText || this.interimText).trim();
@@ -86,6 +121,7 @@ export class LiveListener {
   }
 
   async cancel() {
+    this.resolveWait();
     await this.stopRecorder();
     const opening = this.opening;
     this.opening = null;
@@ -108,7 +144,7 @@ export class LiveListener {
     if (content?.inputTranscription?.text) {
       // A pause can split the answer into several finished parts; keep them all.
       this.finalText = `${this.finalText} ${content.inputTranscription.text}`.trim();
-      this.onTranscript?.();
+      if (this.stopping) this.armSettleTimer();
     }
   }
 }

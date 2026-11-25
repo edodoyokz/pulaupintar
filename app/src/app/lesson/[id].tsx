@@ -7,7 +7,7 @@ import { useProfile } from "@/profile/profile-context";
 import type { ChildProfile } from "@/profile/storage";
 import { useTutorSession } from "@/tutor/use-tutor-session";
 import { Icon } from "@/ui/icons";
-import { KakPinta } from "@/ui/kak-pinta";
+import { KakPinta, type KakPintaMood } from "@/ui/kak-pinta";
 import { ObjectShape, PictureView } from "@/ui/picture";
 import { BackButton, BigButton, CircleButton, ProgressDashes } from "@/ui/primitives";
 import { colors, fonts, radius, spacing } from "@/ui/theme";
@@ -27,6 +27,7 @@ export default LessonScreen;
 
 const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => {
   const [items] = useState<AppItem[]>(() => pickSessionItems(lesson));
+  const [alreadyCompleted] = useState(() => child.completedLessons.includes(lesson.id));
   const { recordSession, recordUsage } = useProfile();
   const session = useTutorSession(lesson, child, items);
   const started = useRef(false);
@@ -66,12 +67,24 @@ const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => 
   );
 
   if (session.phase === "done") {
-    return <Reward lesson={lesson} childName={child.name} stars={session.stars} passed={session.passed} />;
+    return (
+      <Reward
+        lesson={lesson}
+        childName={child.name}
+        stars={session.stars}
+        passed={session.passed}
+        isNewSticker={session.passed && !alreadyCompleted}
+      />
+    );
   }
 
   const listening = session.phase === "listening";
   const busy = session.phase === "checking" || session.phase === "speaking" || session.phase === "idle";
   const micEnabled = session.phase === "your-turn" || listening;
+  const tutorMood: KakPintaMood =
+    session.phase === "listening" ? "listen" : session.phase === "checking" ? "think" : "talk";
+  const tutorAnimated =
+    session.phase === "speaking" || session.phase === "listening" || session.phase === "checking";
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -91,7 +104,7 @@ const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => 
             <Text style={styles.bubbleText}>{session.caption || "Kak Pinta siap mengajar!"}</Text>
           )}
         </View>
-        <KakPinta size={160} mood={listening ? "listen" : "talk"} animated={session.phase === "speaking"} />
+        <KakPinta size={160} mood={tutorMood} animated={tutorAnimated} />
         {session.heard !== "" && (
           <View style={styles.heard}>
             <Icon name="mic" size={16} color={colors.inkSoft} />
@@ -133,7 +146,19 @@ const Session = ({ lesson, child }: { lesson: Lesson; child: ChildProfile }) => 
   );
 };
 
-const Reward = ({ lesson, childName, stars, passed }: { lesson: Lesson; childName: string; stars: number; passed: boolean }) => {
+const Reward = ({
+  lesson,
+  childName,
+  stars,
+  passed,
+  isNewSticker,
+}: {
+  lesson: Lesson;
+  childName: string;
+  stars: number;
+  passed: boolean;
+  isNewSticker: boolean;
+}) => {
   const hasNext = passed && findLesson(lesson.subject, lesson.level + 1) !== undefined;
   return (
     <SafeAreaView style={[styles.screen, styles.rewardScreen]}>
@@ -152,14 +177,14 @@ const Reward = ({ lesson, childName, stars, passed }: { lesson: Lesson; childNam
             : "Kamu menyelesaikan level ini."
           : "Ayo coba lagi supaya level berikutnya terbuka."}
       </Text>
-      <KakPinta size={190} mood="happy" />
+      <KakPinta size={190} mood="happy" animated />
       {passed && (
         <View style={styles.sticker}>
           <View style={styles.stickerIcon}>
             <ObjectShape kind={lesson.sticker.object} size={32} />
           </View>
           <View>
-            <Text style={styles.stickerLabel}>STIKER BARU</Text>
+            <Text style={styles.stickerLabel}>{isNewSticker ? "STIKER BARU" : "STIKER TERKUMPUL"}</Text>
             <Text style={styles.stickerName}>{lesson.sticker.name}</Text>
           </View>
         </View>

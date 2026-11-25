@@ -113,6 +113,10 @@ export class LiveSpeaker {
       };
       this.failTurn = finish;
       this.onMessage = (message) => {
+        if (message.error) {
+          finish(new Error(`live relay error: ${message.error}`));
+          return;
+        }
         const content = message.serverContent;
         for (const part of content?.modelTurn?.parts ?? []) {
           if (!part.inlineData) continue;

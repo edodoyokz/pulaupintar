@@ -71,6 +71,30 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
     ensureOpen();
   };
 
+  const fallbackForStep = (
+    step: Omit<TutorTurnRequest["step"], "item"> & { item?: AppItem },
+  ): SpeechSegment[] => {
+    switch (step.kind) {
+      case "teach":
+        return [{ lang: "id", text: `Ayo kita belajar ${lesson.title}! Dengarkan baik-baik, ya.` }];
+      case "ask":
+        return [{ lang: "id", text: step.item?.question ?? "Sekarang giliran kamu. Coba jawab, ya!" }];
+      case "praise":
+        return [{ lang: "id", text: `Hebat, ${child.name}! Jawabanmu benar!` }];
+      case "hint":
+        return [{ lang: "id", text: "Hampir benar! Ayo coba sekali lagi, pelan-pelan saja." }];
+      case "reveal":
+        return step.item
+          ? [
+              { lang: "id", text: "Jawabannya adalah" },
+              { lang: lesson.answerLang, text: step.item.answers[0] },
+            ]
+          : [{ lang: "id", text: "Ayo kita lihat jawabannya bersama." }];
+      case "wrapup":
+        return [{ lang: "id", text: `Kerja bagus hari ini, ${child.name}! Kamu dapat bintang!` }];
+    }
+  };
+
   const say = async (step: Omit<TutorTurnRequest["step"], "item"> & { item?: AppItem }) => {
     ensureOpen();
     setPhase("speaking");
@@ -79,7 +103,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
       subject: lesson.subject,
       lesson: { title: lesson.title, goal: lesson.goal },
       step: { ...step, item: step.item ? toApiItem(step.item) : undefined },
-    }).catch(() => ({ segments: [{ lang: "id" as const, text: "Ayo kita lanjut belajar!" }] }));
+    }).catch(() => ({ segments: fallbackForStep(step) }));
     lastSpeech.current = segments;
     await playLine(segments);
   };

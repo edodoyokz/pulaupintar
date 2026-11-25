@@ -64,6 +64,7 @@ export const frameToText = (data: unknown): string => {
 
 export type LiveServerMessage = {
   setupComplete?: unknown;
+  error?: string;
   serverContent?: {
     modelTurn?: { parts?: { inlineData?: { data: string } }[] };
     turnComplete?: boolean;

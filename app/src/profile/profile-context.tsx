@@ -13,10 +13,14 @@ type SessionResult = { lessonId: string; stars: number; passed: boolean; seconds
 type ProfileContextValue = {
   ready: boolean;
   child: ChildProfile | null;
+  children: ChildProfile[];
   dailyLimitMinutes: number;
   /** True once today's learning time has reached the parent's limit. */
   limitReached: boolean;
   addChild: (name: string, age: number) => Promise<void>;
+  updateChild: (name: string, age: number) => Promise<void>;
+  switchChild: (id: string) => Promise<void>;
+  resetProgress: () => Promise<void>;
   recordSession: (result: SessionResult) => Promise<void>;
   /** Counts time from a lesson the child left before the end. */
   recordUsage: (seconds: number) => Promise<void>;
@@ -69,6 +73,27 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
     await update({ ...base, activeChildId: profile.id, children: [...base.children, profile] });
   };
 
+  const updateChild = (name: string, age: number) =>
+    updateActiveChild((profile) => ({
+      ...profile,
+      name,
+      age,
+    }));
+
+  const switchChild = async (id: string) => {
+    const current = dataRef.current;
+    if (!current || !current.children.some((candidate) => candidate.id === id)) return;
+    await update({ ...current, activeChildId: id });
+  };
+
+  const resetProgress = () =>
+    updateActiveChild((profile) => ({
+      ...profile,
+      stars: 0,
+      completedLessons: [],
+      usage: undefined,
+    }));
+
   const recordSession = ({ lessonId, stars, passed, seconds }: SessionResult) =>
     updateActiveChild((profile) => ({
       ...profile,
@@ -97,9 +122,13 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
       value={{
         ready: data !== null,
         child,
+        children: data?.children ?? [],
         dailyLimitMinutes,
         limitReached: usedToday >= dailyLimitMinutes * 60,
         addChild,
+        updateChild,
+        switchChild,
+        resetProgress,
         recordSession,
         recordUsage,
         setDailyLimit,

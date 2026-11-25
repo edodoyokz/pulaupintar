@@ -1,10 +1,10 @@
-import { router } from "expo-router";
-import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { completedCount, LEVELS_PER_SUBJECT, PLACES, type Place } from "@/lessons/catalog";
 import { useProfile } from "@/profile/profile-context";
-import { prepareAudio, speak } from "@/tutor/voice";
+import { prepareAudio, speak, stopSpeaking } from "@/tutor/voice";
 import { Icon } from "@/ui/icons";
 import { KakPinta } from "@/ui/kak-pinta";
 import { PlaceIcon } from "@/ui/place-icon";
@@ -13,53 +13,79 @@ import { colors, fonts, radius, spacing, type } from "@/ui/theme";
 const Island = () => {
   const { child, limitReached } = useProfile();
   const childName = child?.name;
+  const [speaking, setSpeaking] = useState(false);
 
-  useEffect(() => {
-    if (!childName) return;
-    const greeting = limitReached
-      ? `Hari ini kamu sudah belajar banyak, ${childName}. Yuk, istirahat dulu!`
-      : `Halo ${childName}! Mau belajar di mana hari ini?`;
-    prepareAudio().then(() => speak([{ lang: "id", text: greeting }]));
-  }, [childName, limitReached]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!childName) return;
+      let active = true;
+      const greeting = limitReached
+        ? `Hari ini kamu sudah belajar banyak, ${childName}. Yuk, istirahat dulu!`
+        : `Halo ${childName}! Mau belajar di mana hari ini?`;
+      prepareAudio().then(async () => {
+        if (!active) return;
+        setSpeaking(true);
+        try {
+          await speak([{ lang: "id", text: greeting }]);
+        } finally {
+          if (active) setSpeaking(false);
+        }
+      });
+      return () => {
+        active = false;
+        setSpeaking(false);
+        stopSpeaking();
+      };
+    }, [childName, limitReached]),
+  );
 
   if (!child) return null;
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Pulau Pintar</Text>
-        <View style={styles.stars} accessibilityLabel={`${child.stars} bintang`}>
-          <Icon name="star" size={24} color={colors.gold} />
-          <Text style={styles.starCount}>{child.stars}</Text>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Pulau Pintar</Text>
+          <View style={styles.stars} accessibilityLabel={`${child.stars} bintang`}>
+            <Icon name="star" size={24} color={colors.gold} />
+            <Text style={styles.starCount}>{child.stars}</Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.greeting}>
-        <KakPinta size={104} mood="talk" />
-        <View style={styles.bubble}>
-          <Text style={styles.bubbleText}>
-            {limitReached
-              ? `Waktunya istirahat, ${child.name}! Besok kita belajar lagi.`
-              : `Halo, ${child.name}! Mau belajar di mana hari ini?`}
-          </Text>
+        <View style={styles.greeting}>
+          <KakPinta size={104} mood={limitReached && !speaking ? "happy" : "talk"} animated={speaking} />
+          <View style={styles.bubble}>
+            <Text style={styles.bubbleText}>
+              {limitReached
+                ? `Waktunya istirahat, ${child.name}! Besok kita belajar lagi.`
+                : `Halo, ${child.name}! Mau belajar di mana hari ini?`}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.places}>
-        {PLACES.map((place) => (
-          <PlaceCard
-            key={place.subject}
-            place={place}
-            done={completedCount(place.subject, child.completedLessons)}
-            locked={limitReached}
-          />
-        ))}
-      </View>
+        <View style={styles.places}>
+          {PLACES.map((place) => (
+            <PlaceCard
+              key={place.subject}
+              place={place}
+              done={completedCount(place.subject, child.completedLessons)}
+              locked={limitReached}
+            />
+          ))}
+        </View>
 
-      <Pressable onPress={() => router.push("/parents")} style={styles.parents} accessibilityRole="button">
-        <Icon name="lock" size={18} color={colors.inkBody} />
-        <Text style={styles.parentsText}>Area orang tua</Text>
-      </Pressable>
+        <Pressable
+          onPress={() => {
+            stopSpeaking();
+            router.push("/parents");
+          }}
+          style={styles.parents}
+          accessibilityRole="button"
+        >
+          <Icon name="lock" size={18} color={colors.inkBody} />
+          <Text style={styles.parentsText}>Area orang tua</Text>
+        </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -67,7 +93,10 @@ const Island = () => {
 const PlaceCard = ({ place, done, locked }: { place: Place; done: number; locked: boolean }) => (
   <Pressable
     disabled={locked}
-    onPress={() => router.push({ pathname: "/levels/[subject]", params: { subject: place.subject } })}
+    onPress={() => {
+      stopSpeaking();
+      router.push({ pathname: "/levels/[subject]", params: { subject: place.subject } });
+    }}
     style={[styles.place, { borderBottomColor: place.shadow }, locked && styles.placeLocked]}
     accessibilityRole="button"
     accessibilityLabel={`${place.name}, ${place.subjectName}, level ${Math.min(done + 1, LEVELS_PER_SUBJECT)}`}
@@ -92,7 +121,8 @@ const PlaceCard = ({ place, done, locked }: { place: Place; done: number; locked
 export default Island;
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.sky, paddingHorizontal: 20, gap: 14 },
+  screen: { flex: 1, backgroundColor: colors.sky },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, gap: 14 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   title: { ...type.title, color: colors.ink },
   stars: {

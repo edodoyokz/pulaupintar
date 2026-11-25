@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useProfile } from "@/profile/profile-context";
 import { prepareAudio } from "@/tutor/voice";
@@ -32,58 +32,62 @@ const Onboarding = () => {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <KakPinta size={96} mood="happy" />
-        <View style={styles.headerText}>
-          <Text style={styles.brand}>PULAUPINTAR</Text>
-          <Text style={styles.title}>Halo, Ayah dan Bunda!</Text>
-        </View>
-      </View>
-      <Text style={styles.intro}>Isi sebentar, lalu serahkan HP ke si kecil. Kak Pinta yang akan mengajak belajar.</Text>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <KakPinta size={96} mood="happy" />
+            <View style={styles.headerText}>
+              <Text style={styles.brand}>PULAUPINTAR</Text>
+              <Text style={styles.title}>Halo, Ayah dan Bunda!</Text>
+            </View>
+          </View>
+          <Text style={styles.intro}>Isi sebentar, lalu serahkan HP ke si kecil. Kak Pinta yang akan mengajak belajar.</Text>
 
-      <Text style={styles.label}>Nama panggilan si kecil</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Contoh: Aya"
-        placeholderTextColor="#6B7488"
-        style={styles.input}
-        autoCapitalize="words"
-        maxLength={20}
-        accessibilityLabel="Nama panggilan si kecil"
-      />
+          <Text style={styles.label}>Nama panggilan si kecil</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Contoh: Aya"
+            placeholderTextColor="#6B7488"
+            style={styles.input}
+            autoCapitalize="words"
+            maxLength={20}
+            accessibilityLabel="Nama panggilan si kecil"
+          />
 
-      <Text style={styles.label}>Usia</Text>
-      <View style={styles.ages}>
-        {AGES.map((option) => (
-          <Pressable
-            key={option}
-            onPress={() => setAge(option)}
-            style={[styles.age, age === option && styles.ageSelected]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: age === option }}
-            accessibilityLabel={`${option} tahun`}
-          >
-            <Text style={[styles.ageText, age === option && styles.ageTextSelected]}>{option}</Text>
-          </Pressable>
-        ))}
-      </View>
+          <Text style={styles.label}>Usia</Text>
+          <View style={styles.ages}>
+            {AGES.map((option) => (
+              <Pressable
+                key={option}
+                onPress={() => setAge(option)}
+                style={[styles.age, age === option && styles.ageSelected]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: age === option }}
+                accessibilityLabel={`${option} tahun`}
+              >
+                <Text style={[styles.ageText, age === option && styles.ageTextSelected]}>{option}</Text>
+              </Pressable>
+            ))}
+          </View>
 
-      <View style={styles.note}>
-        <View style={styles.noteIcon}>
-          <Icon name="mic" size={24} color="#C2540A" />
-        </View>
-        <Text style={styles.noteText}>
-          Kak Pinta perlu mikrofon untuk mendengar jawaban si kecil. Rekaman suara tidak disimpan.
-        </Text>
-      </View>
-      {micDenied && (
-        <Text style={styles.warning}>Izin mikrofon belum diberikan. Aktifkan di pengaturan HP, lalu coba lagi.</Text>
-      )}
+          <View style={styles.note}>
+            <View style={styles.noteIcon}>
+              <Icon name="mic" size={24} color="#C2540A" />
+            </View>
+            <Text style={styles.noteText}>
+              Kak Pinta perlu mikrofon untuk mendengar jawaban si kecil. Rekaman suara tidak disimpan.
+            </Text>
+          </View>
+          {micDenied && (
+            <Text style={styles.warning}>Izin mikrofon belum diberikan. Aktifkan di pengaturan HP, lalu coba lagi.</Text>
+          )}
 
-      <View style={styles.footer}>
-        <BigButton label="Mulai belajar" onPress={handleContinue} disabled={!canContinue} />
-      </View>
+          <View style={styles.footer}>
+            <BigButton label="Mulai belajar" onPress={handleContinue} disabled={!canContinue} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -91,7 +95,9 @@ const Onboarding = () => {
 export default Onboarding;
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.sky, paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: 14 },
+  screen: { flex: 1, backgroundColor: colors.sky },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: 14 },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
   headerText: { flex: 1, gap: 2 },
   brand: { fontFamily: fonts.bodyBold, fontSize: 13, letterSpacing: 1, color: colors.inkSoft },

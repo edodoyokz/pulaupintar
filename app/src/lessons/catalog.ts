@@ -1,12 +1,13 @@
 import type { Lang, Subject } from "@/api/types";
-import type { ObjectKind } from "@/ui/picture";
+import type { IllustrationKind, ObjectKind } from "@/ui/picture";
 
 export type Picture =
   | { kind: "objects"; object: ObjectKind; count: number }
   | { kind: "compare"; object: ObjectKind; left: number; right: number }
   | { kind: "sum"; object: ObjectKind; a: number; b: number }
   | { kind: "text"; text: string }
-  | { kind: "swatch"; color: string };
+  | { kind: "swatch"; color: string }
+  | { kind: "illustration"; illustration: IllustrationKind; label?: string };
 
 export type AppItem = {
   question: string;
@@ -83,9 +84,12 @@ const adding = (object: ObjectKind, a: number, b: number): AppItem => ({
   picture: { kind: "sum", object, a, b },
 });
 
+// STT often spells Indonesian vowels as short interjections.
+const VOWEL_SOUNDS_LIKE: Record<string, string[]> = { a: ["ah"], i: ["ih"], u: ["uh"], e: ["eh"], o: ["oh"] };
+
 const letter = (value: string): AppItem => ({
   question: "Huruf apa ini?",
-  answers: [value],
+  answers: [value, ...(VOWEL_SOUNDS_LIKE[value] ?? [])],
   visual: `huruf ${value.toUpperCase()}`,
   picture: { kind: "text", text: value.toUpperCase() },
 });
@@ -110,12 +114,12 @@ const reading = (text: string, what: "suku kata" | "kata" | "kalimat"): AppItem 
   picture: { kind: "text", text },
 });
 
-/** Kak Pinta says the Indonesian word; the card shows it too, for a parent reading along. */
-const translate = (indonesian: string, answers: string[], topic: string): AppItem => ({
+/** Kak Pinta says the Indonesian word; the card shows an illustration and label so pre-readers and parents both follow. */
+const translate = (indonesian: string, answers: string[], topic: string, illustration: IllustrationKind): AppItem => ({
   question: `Apa Bahasa Inggrisnya ${indonesian}?`,
   answers,
   visual: `${topic}: ${indonesian}`,
-  picture: { kind: "text", text: indonesian },
+  picture: { kind: "illustration", illustration, label: indonesian },
 });
 
 const ENGLISH_NUMBER: Record<number, string> = {
@@ -245,8 +249,12 @@ const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     answerLang: "en",
     sticker: { name: "Sahabat Hewan", object: "fish" },
     pool: [
-      translate("kucing", ["cat"], "hewan"), translate("anjing", ["dog"], "hewan"), translate("burung", ["bird"], "hewan"),
-      translate("ikan", ["fish"], "hewan"), translate("sapi", ["cow"], "hewan"), translate("bebek", ["duck"], "hewan"),
+      translate("kucing", ["cat"], "hewan", "cat"),
+      translate("anjing", ["dog"], "hewan", "dog"),
+      translate("burung", ["bird"], "hewan", "bird"),
+      translate("ikan", ["fish"], "hewan", "fish"),
+      translate("sapi", ["cow"], "hewan", "cow"),
+      translate("bebek", ["duck"], "hewan", "duck"),
     ],
   },
   {
@@ -255,9 +263,12 @@ const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     answerLang: "en",
     sticker: { name: "Tubuh Sehat", object: "apple" },
     pool: [
-      translate("mata", ["eye", "eyes"], "anggota tubuh"), translate("hidung", ["nose", "noses"], "anggota tubuh"),
-      translate("mulut", ["mouth", "mouths"], "anggota tubuh"), translate("tangan", ["hand", "hands"], "anggota tubuh"),
-      translate("kaki", ["foot", "feet", "leg", "legs"], "anggota tubuh"), translate("telinga", ["ear", "ears"], "anggota tubuh"),
+      translate("mata", ["eye", "eyes"], "anggota tubuh", "eye"),
+      translate("hidung", ["nose", "noses"], "anggota tubuh", "nose"),
+      translate("mulut", ["mouth", "mouths"], "anggota tubuh", "mouth"),
+      translate("tangan", ["hand", "hands"], "anggota tubuh", "hand"),
+      translate("kaki", ["foot", "feet", "leg", "legs"], "anggota tubuh", "foot"),
+      translate("telinga", ["ear", "ears"], "anggota tubuh", "ear"),
     ],
   },
   {
@@ -273,9 +284,11 @@ const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     answerLang: "en",
     sticker: { name: "Ramah Sekali", object: "ball" },
     pool: [
-      translate("halo", ["hello", "hi"], "salam"), translate("selamat pagi", ["good morning"], "salam"),
-      translate("terima kasih", ["thank you", "thanks", "thankyou"], "salam"), translate("selamat tinggal", ["goodbye", "good bye", "bye"], "salam"),
-      translate("selamat malam", ["good night", "goodnight"], "salam"),
+      translate("halo", ["hello", "hi"], "salam", "wave"),
+      translate("selamat pagi", ["good morning"], "salam", "sunrise"),
+      translate("terima kasih", ["thank you", "thanks", "thankyou"], "salam", "heart"),
+      translate("selamat tinggal", ["goodbye", "good bye", "bye"], "salam", "goodbye"),
+      translate("selamat malam", ["good night", "goodnight"], "salam", "moon"),
     ],
   },
 ];
@@ -299,6 +312,15 @@ export const findLesson = (subject: Subject, level: number): Lesson | undefined 
   const built = BUILT[subject][level - 1];
   return built ? { ...built, id: lessonId(subject, level), subject, level } : undefined;
 };
+
+export const ALL_LESSONS: Lesson[] = (["berhitung", "membaca", "inggris"] as const).flatMap((subject) =>
+  BUILT[subject].map((built, index) => ({
+    ...built,
+    id: lessonId(subject, index + 1),
+    subject,
+    level: index + 1,
+  })),
+);
 
 export const findLessonById = (id: string): Lesson | undefined => {
   const [subject, level] = id.split("-");

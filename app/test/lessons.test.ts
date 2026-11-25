@@ -43,6 +43,8 @@ describe("grading", () => {
     expect(isCorrectAnswer("em, be", ["b", "be"], ["m", "em", "b", "be"])).toBe(true);
     expect(isCorrectAnswer("Kak", ["k", "ka", "kak"], ["k", "ka", "kak", "b", "be"])).toBe(true);
     expect(isCorrectAnswer("kak tiga", ["3"])).toBe(true);
+    expect(isCorrectAnswer("huruf eh", ["e", "eh"], ["a", "ah", "e", "eh"])).toBe(true);
+    expect(isCorrectAnswer("eh, a", ["a", "ah"], ["a", "ah", "e", "eh"])).toBe(true);
   });
 
   it("takes the last number when a child counts aloud", () => {
