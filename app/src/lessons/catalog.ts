@@ -1,9 +1,9 @@
-import type { Lang, Subject } from "@/api/types";
+import type { Lang, SpeechSegment, Subject } from "@/api/types";
 import type { IllustrationKind, ObjectKind } from "@/ui/picture";
 
 export type Picture =
   | { kind: "objects"; object: ObjectKind; count: number }
-  | { kind: "compare"; object: ObjectKind; left: number; right: number }
+  | { kind: "compare"; object: ObjectKind; left: number; rightObject: ObjectKind; right: number }
   | { kind: "sum"; object: ObjectKind; a: number; b: number }
   | { kind: "text"; text: string }
   | { kind: "swatch"; color: string }
@@ -15,6 +15,11 @@ export type AppItem = {
   /** Plain description of the picture, sent to the tutor so it can talk about it. */
   visual: string;
   picture: Picture;
+  /**
+   * For answers a child can't work out (a letter's name, an English word): Kak Pinta says it first and asks the child
+   * to repeat it, instead of quizzing on something never taught. Played as written, not by the LLM.
+   */
+  model?: SpeechSegment[];
 };
 
 export type Lesson = {
@@ -67,13 +72,15 @@ const counting = (object: ObjectKind, count: number): AppItem => ({
   picture: { kind: "objects", object, count },
 });
 
-const comparing = (object: ObjectKind, left: number, right: number, more: boolean): AppItem => {
-  const winner = (left > right) === more ? "kiri" : "kanan";
+/** Two different objects, so the child answers with what they see ("apel"), not with left and right, which many 4-5 year olds still mix up. */
+const comparing = (leftObject: ObjectKind, left: number, rightObject: ObjectKind, right: number, more: boolean): AppItem => {
+  const [leftNoun, rightNoun] = [OBJECT_NOUN[leftObject], OBJECT_NOUN[rightObject]];
+  const answers = left === right ? ["sama", "sama banyak"] : [(left > right) === more ? leftNoun : rightNoun];
   return {
-    question: more ? "Mana yang lebih banyak, kiri atau kanan?" : "Mana yang lebih sedikit, kiri atau kanan?",
-    answers: [winner],
-    visual: `kiri ${left} ${OBJECT_NOUN[object]}, kanan ${right} ${OBJECT_NOUN[object]}`,
-    picture: { kind: "compare", object, left, right },
+    question: `Mana yang lebih ${more ? "banyak" : "sedikit"}, ${leftNoun} atau ${rightNoun}?`,
+    answers,
+    visual: `kiri ${left} ${leftNoun}, kanan ${right} ${rightNoun}`,
+    picture: { kind: "compare", object: leftObject, left, rightObject, right },
   };
 };
 
@@ -92,6 +99,7 @@ const letter = (value: string): AppItem => ({
   answers: [value, ...(VOWEL_SOUNDS_LIKE[value] ?? [])],
   visual: `huruf ${value.toUpperCase()}`,
   picture: { kind: "text", text: value.toUpperCase() },
+  model: [{ lang: "id", text: `Ini huruf ${value.toUpperCase()}. Coba ucapkan: ${value}!` }],
 });
 
 // Letter names as Indonesian children say them, so speech-to-text can return either form.
@@ -105,6 +113,7 @@ const consonant = (value: string): AppItem => ({
   answers: [value, LETTER_NAMES[value], ...(SOUNDS_LIKE[value] ?? [])],
   visual: `huruf ${value.toUpperCase()}`,
   picture: { kind: "text", text: value.toUpperCase() },
+  model: [{ lang: "id", text: `Ini huruf ${value.toUpperCase()}, dibaca ${LETTER_NAMES[value]}. Coba ucapkan: ${LETTER_NAMES[value]}!` }],
 });
 
 const reading = (text: string, what: "suku kata" | "kata" | "kalimat"): AppItem => ({
@@ -114,12 +123,21 @@ const reading = (text: string, what: "suku kata" | "kata" | "kalimat"): AppItem 
   picture: { kind: "text", text },
 });
 
+/** Kak Pinta shows the word first: "Ini kucing. Bahasa Inggrisnya cat. Coba ucapkan: cat." */
+const showEnglish = (intro: string, english: string): SpeechSegment[] => [
+  { lang: "id", text: `${intro} Bahasa Inggrisnya` },
+  { lang: "en", text: english },
+  { lang: "id", text: "Coba ucapkan:" },
+  { lang: "en", text: english },
+];
+
 /** Kak Pinta says the Indonesian word; the card shows an illustration and label so pre-readers and parents both follow. */
 const translate = (indonesian: string, answers: string[], topic: string, illustration: IllustrationKind): AppItem => ({
   question: `Apa Bahasa Inggrisnya ${indonesian}?`,
   answers,
   visual: `${topic}: ${indonesian}`,
   picture: { kind: "illustration", illustration, label: indonesian },
+  model: showEnglish(`Ini ${indonesian}.`, answers[0]),
 });
 
 const ENGLISH_NUMBER: Record<number, string> = {
@@ -132,6 +150,7 @@ const englishNumber = (n: number): AppItem => ({
   answers: [ENGLISH_NUMBER[n], String(n)],
   visual: `angka ${n}`,
   picture: { kind: "text", text: String(n) },
+  model: showEnglish(`Ini angka ${NUMBER_WORD[n]}.`, ENGLISH_NUMBER[n]),
 });
 
 const color = (indonesian: string, english: string, hex: string): AppItem => ({
@@ -139,6 +158,7 @@ const color = (indonesian: string, english: string, hex: string): AppItem => ({
   answers: [english],
   visual: `warna ${indonesian}`,
   picture: { kind: "swatch", color: hex },
+  model: showEnglish(`Ini warna ${indonesian}.`, english),
 });
 
 const BERHITUNG_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
@@ -165,19 +185,20 @@ const BERHITUNG_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     answerLang: "id",
     sticker: { name: "Timbangan Lucu", object: "fish" },
     pool: [
-      comparing("apple", 2, 5, true), comparing("star", 6, 3, true), comparing("fish", 4, 1, true),
-      comparing("ball", 3, 7, true), comparing("apple", 5, 2, false), comparing("star", 1, 4, false),
-      comparing("fish", 7, 3, false), comparing("ball", 2, 6, false),
+      comparing("apple", 2, "star", 5, true), comparing("star", 6, "fish", 3, true), comparing("fish", 4, "ball", 1, true),
+      comparing("ball", 3, "apple", 7, true), comparing("apple", 5, "fish", 2, false), comparing("star", 1, "ball", 4, false),
+      comparing("fish", 7, "apple", 3, false), comparing("ball", 2, "star", 6, false), comparing("apple", 4, "star", 4, true),
     ],
   },
   {
     title: "Angka 11 sampai 20",
-    goal: "Anak bisa mengenali dan menghitung sampai 20.",
+    goal: "Anak bisa mengenali angka 11 sampai 20 dan menghitung benda sampai 15.",
     answerLang: "id",
     sticker: { name: "Bintang Besar", object: "star" },
+    // Counting stops at 15: more small objects than that on a phone screen is too hard for a 5 year old.
     pool: [
-      numeral(11), numeral(13), numeral(15), numeral(17), numeral(20),
-      counting("star", 12), counting("apple", 14), counting("fish", 16), counting("ball", 18),
+      numeral(11), numeral(13), numeral(16), numeral(17), numeral(19), numeral(20),
+      counting("star", 12), counting("apple", 14), counting("fish", 15),
     ],
   },
   {
@@ -188,6 +209,7 @@ const BERHITUNG_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     pool: [
       adding("apple", 1, 2), adding("star", 2, 2), adding("fish", 3, 1), adding("ball", 2, 3),
       adding("apple", 4, 2), adding("star", 3, 3), adding("fish", 5, 2), adding("ball", 4, 4),
+      adding("apple", 5, 4), adding("star", 7, 3), adding("fish", 5, 5),
     ],
   },
 ];
@@ -201,8 +223,8 @@ const MEMBACA_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     pool: ["a", "i", "u", "e", "o"].map(letter),
   },
   {
-    title: "Huruf konsonan dan bunyinya",
-    goal: "Anak bisa menyebut huruf b, d, k, m, p, s, t.",
+    title: "Mengenal huruf konsonan",
+    goal: "Anak bisa menyebut nama huruf b, d, k, m, p, s, t.",
     answerLang: "id",
     sticker: { name: "Teman Huruf", object: "ball" },
     pool: ["b", "d", "k", "m", "p", "s", "t"].map(consonant),
@@ -226,7 +248,7 @@ const MEMBACA_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     goal: "Anak bisa membaca kalimat dua kata.",
     answerLang: "id",
     sticker: { name: "Jago Baca", object: "star" },
-    pool: ["ini bola", "aku suka", "ibu masak", "adik tidur", "bapak baca", "kakak lari"].map((text) =>
+    pool: ["ini bola", "adik makan", "ibu masak", "adik tidur", "bapak baca", "kakak lari"].map((text) =>
       reading(text, "kalimat"),
     ),
   },
@@ -240,7 +262,9 @@ const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     sticker: { name: "Pelangi Kecil", object: "ball" },
     pool: [
       color("merah", "red", "#E8483B"), color("biru", "blue", "#4DA3E8"), color("kuning", "yellow", "#FFC83D"),
-      color("hijau", "green", "#3DBE7A"), color("oranye", "orange", "#F08A24"),
+      color("hijau", "green", "#3DBE7A"), color("oranye", "orange", "#F08A24"), color("merah muda", "pink", "#FF7EB6"),
+      color("ungu", "purple", "#8E5CD9"), color("cokelat", "brown", "#8B5A2B"), color("hitam", "black", "#2B2B2B"),
+      color("putih", "white", "#FFFFFF"),
     ],
   },
   {

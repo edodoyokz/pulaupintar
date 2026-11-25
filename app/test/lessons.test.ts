@@ -122,16 +122,33 @@ describe("berhitung curriculum", () => {
   });
 
   it("checks addition and comparison answers against the pictures", () => {
-    for (const item of findLesson("berhitung", 5)!.pool) {
+    const sums = findLesson("berhitung", 5)!.pool.map((item) => {
       if (item.picture.kind !== "sum") throw new Error("level 5 must be sums");
       expect(item.answers[0]).toBe(String(item.picture.a + item.picture.b));
-      expect(item.picture.a + item.picture.b).toBeLessThanOrEqual(10);
-    }
+      return item.picture.a + item.picture.b;
+    });
+    expect(Math.max(...sums)).toBe(10);
+    expect(sums).toContain(9);
     for (const item of findLesson("berhitung", 3)!.pool) {
       if (item.picture.kind !== "compare") throw new Error("level 3 must be comparisons");
       const { left, right } = item.picture;
+      const [, leftNoun, rightNoun] = /kiri \d+ (\S+), kanan \d+ (\S+)/.exec(item.visual)!;
       const asksMore = item.question.includes("banyak");
-      expect(item.answers[0]).toBe((left > right) === asksMore ? "kiri" : "kanan");
+      expect(leftNoun).not.toBe(rightNoun);
+      expect(item.answers[0]).toBe(left === right ? "sama" : (left > right) === asksMore ? leftNoun : rightNoun);
+    }
+  });
+
+  it("teaches before asking: repeating the model line's word counts as the right answer", () => {
+    for (const subject of ["membaca", "inggris"] as const) {
+      for (const level of subject === "inggris" ? [1, 2, 3, 4, 5] : [1, 2]) {
+        const lesson = findLesson(subject, level)!;
+        const others = lesson.pool.flatMap((item) => item.answers);
+        for (const item of lesson.pool) {
+          const repeated = item.model!.at(-1)!.text.replace(/^.*Coba ucapkan: /, "").replace(/!$/, "");
+          expect(isCorrectAnswer(repeated, item.answers, others, lesson.answerLang)).toBe(true);
+        }
+      }
     }
   });
 });
