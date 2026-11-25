@@ -9,11 +9,31 @@ import {
 } from "expo-audio";
 import { File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
+import { useRef } from "react";
 import { Platform } from "react-native";
 import { requestSpeech, requestTranscript } from "@/api/client";
 import type { Lang, SpeechSegment, SttEncoding } from "@/api/types";
 
 const SAMPLE_RATE = 16_000;
+
+// Gemini Live streaming needs a native audio module, so it only exists in a development or release build.
+// Expo Go, a missing module or EXPO_PUBLIC_VOICE=rest all fall back to the request-and-reply voice.
+type LiveVoice = { speaker: import("./live/speaker").LiveSpeaker; Listener: typeof import("./live/listener").LiveListener };
+let liveVoice: LiveVoice | null | undefined;
+const getLiveVoice = (): LiveVoice | null => {
+  if (liveVoice !== undefined) return liveVoice;
+  if (process.env.EXPO_PUBLIC_VOICE === "rest") return (liveVoice = null);
+  try {
+    const { LiveSpeaker } = require("./live/speaker") as typeof import("./live/speaker");
+    const { LiveListener } = require("./live/listener") as typeof import("./live/listener");
+    liveVoice = { speaker: new LiveSpeaker(), Listener: LiveListener };
+  } catch {
+    liveVoice = null;
+  }
+  return liveVoice;
+};
+/** Turned off for the rest of the run when the live microphone can't start, so the child is not stuck. */
+let liveListeningBroken = false;
 
 // Formats the speech-to-text service reads directly: AMR-WB on Android, WAV (PCM) on iOS.
 const RECORDING_OPTIONS: RecordingOptions = {
@@ -35,6 +55,16 @@ const RECORDING_OPTIONS: RecordingOptions = {
 const ENCODING: SttEncoding = Platform.OS === "ios" ? "LINEAR16" : "AMR_WB";
 
 export const prepareAudio = async (): Promise<boolean> => {
+  const live = getLiveVoice();
+  if (live && !liveListeningBroken) {
+    try {
+      const { AudioManager } = require("react-native-audio-api") as typeof import("react-native-audio-api");
+      AudioManager.setSystemOptions({ ios: { category: "playAndRecord", mode: "spokenAudio", options: ["defaultToSpeaker", "allowBluetoothA2DP"] } });
+      return await live.Listener.requestPermission();
+    } catch {
+      liveListeningBroken = true;
+    }
+  }
   const permission = await requestRecordingPermissionsAsync();
   await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: permission.granted });
   return permission.granted;
@@ -92,6 +122,7 @@ const playFile = (uri: string) =>
 export const stopSpeaking = () => {
   speechGeneration += 1;
   stopActiveClip?.();
+  getLiveVoice()?.speaker.stop();
   Speech.stop();
 };
 
@@ -116,10 +147,20 @@ const speakOnDevice = (segments: SpeechSegment[]) =>
 
 export const speak = async (segments: SpeechSegment[]): Promise<void> => {
   const generation = speechGeneration;
+  const live = getLiveVoice();
+  if (live) {
+    try {
+      await live.speaker.speak(segments);
+      return;
+    } catch {
+      // Live can't be reached: fall back to the voice that comes back as a file.
+      if (generation !== speechGeneration) return;
+    }
+  }
   try {
-    const { audioBase64 } = await requestSpeech(segments);
+    const { audioBase64, mimeType } = await requestSpeech(segments);
     if (generation !== speechGeneration) return;
-    const file = new File(Paths.cache, `tutor-${Date.now()}.mp3`);
+    const file = new File(Paths.cache, `tutor-${Date.now()}.${mimeType === "audio/wav" ? "wav" : "mp3"}`);
     file.create();
     await file.write(audioBase64, { encoding: "base64" });
     try {
@@ -135,14 +176,32 @@ export const speak = async (segments: SpeechSegment[]): Promise<void> => {
 
 export const useChildMicrophone = () => {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
+  const liveListener = useRef<InstanceType<LiveVoice["Listener"]> | null>(null);
 
   const start = async () => {
+    const live = getLiveVoice();
+    if (live && !liveListeningBroken) {
+      const listener = new live.Listener();
+      try {
+        await listener.start();
+        liveListener.current = listener;
+        return;
+      } catch {
+        liveListeningBroken = true;
+        await listener.cancel().catch(() => undefined);
+      }
+    }
     await recorder.prepareToRecordAsync();
     recorder.record();
   };
 
   /** Throws when the recording or the speech-to-text call fails, so a failure never counts as a wrong answer. */
   const stopAndTranscribe = async (expect: Lang, hints: string[]): Promise<string> => {
+    const listener = liveListener.current;
+    if (listener) {
+      liveListener.current = null;
+      return listener.stopAndTranscribe();
+    }
     await recorder.stop();
     if (!recorder.uri) throw new Error("nothing was recorded");
     const audioBase64 = await new File(recorder.uri).base64();
@@ -157,6 +216,9 @@ export const useChildMicrophone = () => {
   };
 
   const cancel = async () => {
+    const listener = liveListener.current;
+    liveListener.current = null;
+    await listener?.cancel().catch(() => undefined);
     if (recorder.isRecording) await recorder.stop().catch(() => undefined);
   };
 

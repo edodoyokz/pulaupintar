@@ -28,6 +28,15 @@
     "plugins": [
       "expo-router",
       [
+        "react-native-audio-api",
+        {
+          "iosMicrophonePermission": "Pulaupintar memakai mikrofon agar tutor bisa mendengar jawaban anak.",
+          "iosBackgroundMode": false,
+          "androidForegroundService": false,
+          "androidPermissions": ["android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS"]
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",

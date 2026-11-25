@@ -4,15 +4,21 @@
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // Non-secret model settings. API keys go in secrets: npx wrangler secret put SUMOPOD_API_KEY (and POLLINATIONS_API_KEY)
+  // Non-secret settings. API keys go in secrets: npx wrangler secret put GEMINI_API_KEY (and SUMOPOD_API_KEY, POLLINATIONS_API_KEY)
   "vars": {
-    "TUTOR_PROVIDER": "sumopod",
-    "TUTOR_MODEL": "hy4-flash",
-    "SAFETY_PROVIDER": "sumopod",
-    "SAFETY_MODEL": "jev-1.14.0",
-    // Backups when Sumopod errors, is slow (tutor over 4 s, safety over 2.5 s) or returns a cut-off reply.
-    "TUTOR_FALLBACK_PROVIDER": "pollinations",
-    "TUTOR_FALLBACK_MODEL": "openai/gpt-5-nano",
+    // Gemini does everything: it writes Kak Pinta's lines, checks them, and (SPEECH_PROVIDER) speaks and hears.
+    // The app streams voice straight to Gemini Live 3.8 with one-time tokens from /v1/live/token;
+    // /v1/tts and /v1/stt (also Gemini) are the fallback when streaming isn't available.
+    "TUTOR_PROVIDER": "gemini",
+    "TUTOR_MODEL": "gemini-3.1-flash-lite",
+    "SAFETY_PROVIDER": "gemini",
+    "SAFETY_MODEL": "gemini-3.1-flash-lite",
+    "SPEECH_PROVIDER": "gemini",
+    "GEMINI_LIVE_MODEL": "gemini-3.8-live",
+    "GEMINI_LISTEN_MODEL": "gemini-3.5-transcribe-live",
+    // Backups when Gemini errors, is slow (tutor over 4 s, safety over 2.5 s) or returns a cut-off reply.
+    "TUTOR_FALLBACK_PROVIDER": "sumopod",
+    "TUTOR_FALLBACK_MODEL": "gemini/gemini-3.1-flash-lite",
     "SAFETY_FALLBACK_PROVIDER": "pollinations",
     "SAFETY_FALLBACK_MODEL": "qwen/qwen3guard-gen-8b"
   }

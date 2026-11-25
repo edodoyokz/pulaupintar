@@ -6,6 +6,8 @@ export const OPENAI_COMPATIBLE_PROVIDERS = {
   pollinations: { url: "https://gen.pollinations.ai/v1/chat/completions", defaultModel: "openai/gpt-5-nano" },
   // Model ids come from the Sumopod AI dashboard; TUTOR_MODEL overrides this guess.
   sumopod: { url: "https://ai.sumopod.com/v1/chat/completions", defaultModel: "gpt-5-nano" },
+  // Gemini's OpenAI-compatible endpoint; the key is GEMINI_API_KEY.
+  gemini: { url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-3.1-flash-lite" },
 } as const;
 
 export const TUTOR_CALL_TIMEOUT_MS = 4_000;

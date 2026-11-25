@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
+import { createLiveToken, type LiveRole } from "./live-token";
+import { synthesizeWithGemini, transcribeWithGemini } from "./gemini-speech";
 import {
   openAiCompatibleModel,
   isSafetyReply,
@@ -20,7 +22,11 @@ import type { Env, SttRequest, TtsRequest, TutorTurnRequest } from "./types";
 const MAX_AUDIO_BASE64_CHARS = 1_500_000; // about 1 MB of audio, far above a child's short answer
 
 const apiKeyFor = (env: Env, provider: OpenAiCompatibleProvider) =>
-  (provider === "sumopod" ? env.SUMOPOD_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
+  (provider === "sumopod" ? env.SUMOPOD_API_KEY : provider === "gemini" ? env.GEMINI_API_KEY : env.POLLINATIONS_API_KEY) ?? "";
+
+/** The tutor's own provider unless a provider is named; "pollinations" when nothing is set. */
+const providerOrDefault = (env: Env, named?: OpenAiCompatibleProvider): OpenAiCompatibleProvider =>
+  named ?? (env.TUTOR_PROVIDER === "sumopod" || env.TUTOR_PROVIDER === "gemini" ? env.TUTOR_PROVIDER : "pollinations");
 
 const tutorBackup = (env: Env): TutorModel | undefined => {
   const provider = env.TUTOR_FALLBACK_PROVIDER;
@@ -35,7 +41,7 @@ const tutorBackup = (env: Env): TutorModel | undefined => {
 
 const tutorModelFor = (env: Env): TutorModel => {
   const backup = tutorBackup(env);
-  const provider = env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations";
+  const provider = providerOrDefault(env);
   const primary = openAiCompatibleModel({
     provider,
     apiKey: apiKeyFor(env, provider),
@@ -57,7 +63,7 @@ const safetyBackup = (env: Env): TutorModel | undefined => {
 
 const safetyGuardFor = (env: Env): SafetyGuard | undefined => {
   if (!env.SAFETY_MODEL) return undefined;
-  const provider = env.SAFETY_PROVIDER ?? (env.TUTOR_PROVIDER === "sumopod" ? "sumopod" : "pollinations");
+  const provider = providerOrDefault(env, env.SAFETY_PROVIDER);
   const primary = openAiCompatibleModel({
     provider,
     apiKey: apiKeyFor(env, provider),
@@ -92,6 +98,9 @@ app.post("/v1/tts", async (c) => {
   if (!segments) {
     return c.json({ error: "segments missing, too long, or not allowed" }, 400);
   }
+  if (c.env.SPEECH_PROVIDER === "gemini") {
+    return c.json({ audioBase64: await synthesizeWithGemini(c.env, segments), mimeType: "audio/wav" });
+  }
   const audioBase64 = await synthesize(c.env, segments);
   return c.json({ audioBase64, mimeType: "audio/mpeg" });
 });
@@ -101,7 +110,16 @@ app.post("/v1/stt", async (c) => {
   if (!request.audioBase64 || request.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
     return c.json({ error: "audio missing or too long" }, 400);
   }
-  return c.json({ transcript: await transcribe(c.env, request) });
+  const transcript = c.env.SPEECH_PROVIDER === "gemini" ? await transcribeWithGemini(c.env, request) : await transcribe(c.env, request);
+  return c.json({ transcript });
+});
+
+// Live voice: the phone talks to Gemini directly with a one-time token, so audio streams without a hop through the Worker.
+app.post("/v1/live/token", async (c) => {
+  const { role } = await c.req.json<{ role?: LiveRole }>();
+  if (role !== "speak" && role !== "listen") return c.json({ error: "role must be speak or listen" }, 400);
+  if (!c.env.GEMINI_API_KEY) return c.json({ error: "live voice not configured" }, 503);
+  return c.json(await createLiveToken(c.env, role));
 });
 
 app.onError((error, c) => {

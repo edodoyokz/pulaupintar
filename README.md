@@ -18,12 +18,15 @@ Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menek
 ```bash
 cd backend
 npm install
-cp .dev.vars.example .dev.vars   # isi SUMOPOD_API_KEY, GOOGLE_CLOUD_API_KEY, APP_TOKEN
+cp .dev.vars.example .dev.vars   # isi GEMINI_API_KEY, APP_TOKEN (SUMOPOD_API_KEY dan POLLINATIONS_API_KEY untuk cadangan)
 npm run dev                      # http://localhost:8787
 npm test
 ```
 
-- `GOOGLE_CLOUD_API_KEY` perlu mengaktifkan Cloud Text-to-Speech API dan Cloud Speech-to-Text API.
+- Suara memakai Gemini: `GEMINI_API_KEY` menulis kalimat, memeriksa keamanan, dan membuat token sekali pakai (`/v1/live/token`) supaya aplikasi men-stream suara langsung ke Gemini Live 3.8 (bicara) dan Gemini 3.5 Transcribe Live (mendengar). Kunci tidak pernah ada di aplikasi.
+- Aplikasi memakai modul audio native (`react-native-audio-api`), jadi butuh development build, bukan Expo Go. Tanpa itu (atau dengan `EXPO_PUBLIC_VOICE=rest`) aplikasi memakai `/v1/tts` dan `/v1/stt` yang juga Gemini.
+- Untuk kembali ke Google Cloud TTS/STT: set `SPEECH_PROVIDER=google`, isi `GOOGLE_CLOUD_API_KEY` (Cloud Text-to-Speech dan Speech-to-Text API aktif), dan `EXPO_PUBLIC_VOICE=rest` di aplikasi.
+- **Penting:** Ketentuan Gemini API melarang aplikasi yang ditujukan atau kemungkinan dipakai anak di bawah 18 tahun, dan di tier gratis data dipakai Google untuk meningkatkan produknya (peninjau manusia bisa membacanya). Pakai kunci dari proyek berbayar, dan periksa ketentuan sebelum dipakai anak lain.
 - `APP_TOKEN` adalah kata sandi bersama antara aplikasi dan backend, supaya orang lain tidak bisa memakai API key.
 - Deploy: `npx wrangler secret put SUMOPOD_API_KEY` (dan seterusnya), lalu `npm run deploy`.
 - Setiap panggilan AI mencatat log `{"event":"cost", ...}` untuk menghitung biaya per sesi (dasar harga langganan nanti).
