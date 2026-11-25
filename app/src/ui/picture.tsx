@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Rect, Stop, LinearGradient } from "react-native-svg";
 import type { Picture } from "@/lessons/catalog";
 import { colors, fonts, radius, spacing } from "./theme";
 
@@ -123,7 +123,6 @@ const INK = "#1F2A44";
 export const Illustration = ({ kind, size = 148 }: { kind: IllustrationKind; size?: number }) => {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const bgGrad = `bg-${uid}`;
-  const mainGrad = `main-${uid}`;
   return (
     <Svg width={size} height={size} viewBox="0 0 160 160" accessibilityElementsHidden importantForAccessibility="no">
       <Defs>
@@ -131,10 +130,6 @@ export const Illustration = ({ kind, size = 148 }: { kind: IllustrationKind; siz
           <Stop offset="0%" stopColor="#FFFDF7" />
           <Stop offset="100%" stopColor="#F2E9DA" />
         </RadialGradient>
-        <LinearGradient id={mainGrad} x1="20%" y1="0%" x2="80%" y2="100%">
-          <Stop offset="0%" stopColor="#FFE1A8" />
-          <Stop offset="100%" stopColor="#F5B762" />
-        </LinearGradient>
       </Defs>
       <Circle cx={80} cy={80} r={72} fill={`url(#${bgGrad})`} />
 
@@ -398,46 +393,60 @@ const ObjectRow = ({ kind, count, size }: { kind: ObjectKind; count: number; siz
   </View>
 );
 
-const sizeFor = (count: number) => (count <= 5 ? 68 : count <= 10 ? 50 : 34);
+const sizeFor = (count: number, compact = false) => {
+  const base = count <= 5 ? 68 : count <= 10 ? 50 : 34;
+  return compact ? Math.round(base * 0.8) : base;
+};
 
 // A letter or number fills the card; words and short sentences get smaller.
-const textSizeFor = (text: string) => {
-  const fontSize = text.length <= 2 ? 140 : text.length <= 6 ? 84 : 56;
+const textSizeFor = (text: string, compact = false) => {
+  const base = text.length <= 2 ? 140 : text.length <= 6 ? 84 : 56;
+  const fontSize = compact ? Math.round(base * 0.8) : base;
   return { fontSize, lineHeight: Math.round(fontSize * 1.15) };
 };
 
-const Sign = ({ children }: { children: string }) => <Text style={styles.sign}>{children}</Text>;
+const Sign = ({ children, compact = false }: { children: string; compact?: boolean }) => (
+  <Text style={[styles.sign, compact && styles.signCompact]}>{children}</Text>
+);
 
-export const PictureView = ({ picture }: { picture: Picture }) => {
+export const PictureView = ({ picture, compact = false }: { picture: Picture; compact?: boolean }) => {
   switch (picture.kind) {
     case "objects":
-      return <ObjectRow kind={picture.object} count={picture.count} size={sizeFor(picture.count)} />;
+      return <ObjectRow kind={picture.object} count={picture.count} size={sizeFor(picture.count, compact)} />;
     case "compare":
       return (
         <View style={styles.compare}>
-          <ObjectRow kind={picture.object} count={picture.left} size={sizeFor(Math.max(picture.left, picture.right) * 2)} />
+          <ObjectRow
+            kind={picture.object}
+            count={picture.left}
+            size={sizeFor(Math.max(picture.left, picture.right) * 2, compact)}
+          />
           <View style={styles.divider} />
-          <ObjectRow kind={picture.object} count={picture.right} size={sizeFor(Math.max(picture.left, picture.right) * 2)} />
+          <ObjectRow
+            kind={picture.rightObject}
+            count={picture.right}
+            size={sizeFor(Math.max(picture.left, picture.right) * 2, compact)}
+          />
         </View>
       );
     case "sum":
       return (
         <View style={styles.sum}>
-          <ObjectRow kind={picture.object} count={picture.a} size={44} />
-          <Sign>+</Sign>
-          <ObjectRow kind={picture.object} count={picture.b} size={44} />
+          <ObjectRow kind={picture.object} count={picture.a} size={compact ? 36 : 44} />
+          <Sign compact={compact}>+</Sign>
+          <ObjectRow kind={picture.object} count={picture.b} size={compact ? 36 : 44} />
         </View>
       );
     case "text":
       return (
-        <Text style={[styles.bigText, textSizeFor(picture.text)]} adjustsFontSizeToFit numberOfLines={2}>
+        <Text style={[styles.bigText, textSizeFor(picture.text, compact)]} adjustsFontSizeToFit numberOfLines={2}>
           {picture.text}
         </Text>
       );
     case "swatch":
       return (
-        <View style={styles.swatchRing}>
-          <View style={[styles.swatch, { backgroundColor: picture.color }]}>
+        <View style={[styles.swatchRing, compact && styles.swatchRingCompact]}>
+          <View style={[styles.swatch, compact && styles.swatchCompact, { backgroundColor: picture.color }]}>
             <View style={styles.swatchGloss} />
           </View>
         </View>
@@ -445,7 +454,7 @@ export const PictureView = ({ picture }: { picture: Picture }) => {
     case "illustration":
       return (
         <View style={styles.illustration}>
-          <Illustration kind={picture.illustration} size={146} />
+          <Illustration kind={picture.illustration} size={compact ? 116 : 146} />
           {picture.label && (
             <View style={styles.labelPill}>
               <Text style={styles.labelText}>{picture.label}</Text>
@@ -459,19 +468,25 @@ export const PictureView = ({ picture }: { picture: Picture }) => {
 const styles = StyleSheet.create({
   group: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 6, maxWidth: 300 },
   compare: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.md },
-  divider: { width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: "#F2C29B" },
+  divider: { width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: colors.pictureBorder },
   sum: { alignItems: "center", gap: spacing.sm },
   sign: { fontFamily: fonts.display, fontSize: 40, color: colors.ink },
+  signCompact: { fontSize: 32 },
   bigText: { fontFamily: fonts.display, textAlign: "center", color: colors.ink },
   swatchRing: {
     width: 164,
     height: 164,
     borderRadius: 82,
     borderWidth: 4,
-    borderColor: "#E5ECF5",
+    borderColor: colors.swatchRing,
     backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
+  },
+  swatchRingCompact: {
+    width: 132,
+    height: 132,
+    borderRadius: 66,
   },
   swatch: {
     width: 146,
@@ -480,6 +495,11 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: colors.ink,
     overflow: "hidden",
+  },
+  swatchCompact: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
   },
   swatchGloss: {
     position: "absolute",

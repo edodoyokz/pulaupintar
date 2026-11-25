@@ -7,6 +7,7 @@ import { isCorrectAnswer, speechVocabulary } from "./grading";
 import { speak, stopSpeaking, useChildMicrophone } from "./voice";
 
 export type SessionPhase = "idle" | "speaking" | "your-turn" | "listening" | "checking" | "done";
+export type TurnFeedback = "none" | "correct" | "hint" | "reveal";
 
 const MAX_ATTEMPTS = 2;
 
@@ -27,6 +28,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
   const [itemIndex, setItemIndex] = useState(0);
   const [caption, setCaption] = useState("");
   const [heard, setHeard] = useState("");
+  const [feedback, setFeedback] = useState<TurnFeedback>("none");
   const [correctCount, setCorrectCount] = useState(0);
   const phaseRef = useRef<SessionPhase>("idle");
   const attemptRef = useRef(1);
@@ -113,15 +115,25 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
     await playLine(segments);
   };
 
+  // A level the child has not passed yet teaches each answer first ("Ini kucing… Coba ucapkan: cat"); once passed,
+  // replaying it quizzes recall with the plain question.
+  const teachesAnswers = !child.completedLessons.includes(lesson.id);
+
   const askItem = async (index: number) => {
     attemptRef.current = 1;
     setItemIndex(index);
     setHeard("");
-    await say({ kind: "ask", item: items[index] });
+    setFeedback("none");
+    const model = teachesAnswers ? items[index].model : undefined;
+    if (model) {
+      lastSpeech.current = model;
+      await playLine(model);
+    } else await say({ kind: "ask", item: items[index] });
     setPhase("your-turn");
   };
 
   const finish = async (score: number) => {
+    setFeedback("none");
     setCorrectCount(score);
     await say({ kind: "wrapup" });
     setPhase("done");
@@ -148,6 +160,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
   const startListening = () =>
     runSafely(async () => {
       if (phaseRef.current !== "your-turn") return;
+      setFeedback("none");
       setPhase("listening");
       try {
         await microphone.start(listenHints);
@@ -175,13 +188,16 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
       if (isCorrectAnswer(childSaid, item.answers, lessonAnswers, lesson.answerLang)) {
         const score = correctCount + 1;
         setCorrectCount(score);
+        setFeedback("correct");
         await say({ kind: "praise", item, childSaid, attempt });
         await goToNext(itemIndex, score);
       } else if (attempt < MAX_ATTEMPTS) {
         attemptRef.current = attempt + 1;
+        setFeedback("hint");
         await say({ kind: "hint", item, childSaid, attempt });
         setPhase("your-turn");
       } else {
+        setFeedback("reveal");
         await say({ kind: "reveal", item, childSaid, attempt });
         await goToNext(itemIndex, correctCount);
       }
@@ -203,6 +219,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
     itemTotal: items.length,
     caption,
     heard,
+    feedback,
     correctCount,
     passed: result.passed,
     stars: result.stars,

@@ -24,9 +24,9 @@ const CENTER = VIEWBOX / 2;
 
 const INK = "#1F2A44";
 const IRIS_HIGHLIGHT = "#32456E";
-const BODY_STROKE = "#D8C9AA";
-const WING_STROKE = "#D6C6A6";
-const CREST_STROKE = "#D49200";
+const BODY_STROKE = "#C6A47E";
+const WING_STROKE = "#C6A47E";
+const CREST_STROKE = "#C27D00";
 const BEAK_STROKE = "#3A4354";
 const FOOT_FILL = "#F5B727";
 const FOOT_STROKE = "#C98A00";
@@ -208,68 +208,90 @@ export const KakPinta = ({ size = 160, mood = "talk", animated = false }: KakPin
         ? withRepeat(withTiming(1, { duration: 850, easing: Easing.inOut(Easing.sin) }), -1, true)
         : withTiming(0.7, { duration: 200 });
     } else if (mood === "happy") {
+      // Celebrates for ~2 seconds then settles into a calm happy smile.
       jaw.value = animated
-        ? withRepeat(
-            withSequence(
-              withTiming(0.85, { duration: 240, easing: Easing.inOut(Easing.sin) }),
-              withTiming(0.6, { duration: 240, easing: Easing.inOut(Easing.sin) }),
+        ? withSequence(
+            withRepeat(
+              withSequence(
+                withTiming(0.85, { duration: 240, easing: Easing.inOut(Easing.sin) }),
+                withTiming(0.6, { duration: 240, easing: Easing.inOut(Easing.sin) }),
+              ),
+              4,
+              true,
             ),
-            -1,
-            true,
+            withTiming(0.65, { duration: 220 }),
           )
         : withTiming(0.65, { duration: 200 });
       hop.value = animated
-        ? withRepeat(
-            withSequence(
-              withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) }),
-              withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }),
+        ? withSequence(
+            withRepeat(
+              withSequence(
+                withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) }),
+                withTiming(0, { duration: 260, easing: Easing.in(Easing.quad) }),
+              ),
+              4,
+              false,
             ),
-            -1,
-            false,
+            withTiming(0, { duration: 150 }),
           )
         : withSpring(0);
       tilt.value = animated
-        ? withRepeat(
-            withSequence(
-              withTiming(-4, { duration: 360, easing: Easing.inOut(Easing.sin) }),
-              withTiming(4, { duration: 360, easing: Easing.inOut(Easing.sin) }),
+        ? withSequence(
+            withRepeat(
+              withSequence(
+                withTiming(-4, { duration: 360, easing: Easing.inOut(Easing.sin) }),
+                withTiming(4, { duration: 360, easing: Easing.inOut(Easing.sin) }),
+              ),
+              3,
+              true,
             ),
-            -1,
-            true,
+            withTiming(0, { duration: 280 }),
           )
         : withSpring(0);
       crest.value = animated
-        ? withRepeat(
-            withSequence(
-              withTiming(7, { duration: 260, easing: Easing.inOut(Easing.sin) }),
-              withTiming(-4, { duration: 260, easing: Easing.inOut(Easing.sin) }),
+        ? withSequence(
+            withRepeat(
+              withSequence(
+                withTiming(7, { duration: 260, easing: Easing.inOut(Easing.sin) }),
+                withTiming(-4, { duration: 260, easing: Easing.inOut(Easing.sin) }),
+              ),
+              4,
+              true,
             ),
-            -1,
-            true,
+            withTiming(4, { duration: 250 }),
           )
         : withSpring(4);
       wingL.value = animated
-        ? withRepeat(
-            withSequence(
-              withTiming(-28, { duration: 220, easing: Easing.out(Easing.quad) }),
-              withTiming(-6, { duration: 220, easing: Easing.in(Easing.quad) }),
+        ? withSequence(
+            withRepeat(
+              withSequence(
+                withTiming(-28, { duration: 220, easing: Easing.out(Easing.quad) }),
+                withTiming(-6, { duration: 220, easing: Easing.in(Easing.quad) }),
+              ),
+              4,
+              false,
             ),
-            -1,
-            false,
+            withTiming(-10, { duration: 260 }),
           )
         : withSpring(-10);
       wingR.value = animated
-        ? withRepeat(
-            withSequence(
-              withTiming(28, { duration: 220, easing: Easing.out(Easing.quad) }),
-              withTiming(6, { duration: 220, easing: Easing.in(Easing.quad) }),
+        ? withSequence(
+            withRepeat(
+              withSequence(
+                withTiming(28, { duration: 220, easing: Easing.out(Easing.quad) }),
+                withTiming(6, { duration: 220, easing: Easing.in(Easing.quad) }),
+              ),
+              4,
+              false,
             ),
-            -1,
-            false,
+            withTiming(10, { duration: 260 }),
           )
         : withSpring(10);
       accent.value = animated
-        ? withRepeat(withTiming(1, { duration: 550, easing: Easing.inOut(Easing.sin) }), -1, true)
+        ? withSequence(
+            withRepeat(withTiming(1, { duration: 550, easing: Easing.inOut(Easing.sin) }), 4, true),
+            withTiming(0, { duration: 300 }),
+          )
         : withTiming(0, { duration: 150 });
     } else {
       jaw.value = withTiming(0, { duration: 140 });

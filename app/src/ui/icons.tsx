@@ -2,9 +2,9 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 export type IconName = "mic" | "stop" | "speaker" | "close" | "back" | "star" | "lock" | "shield" | "check" | "play";
 
-type IconProps = { name: IconName; size?: number; color: string };
+type IconProps = { name: IconName; size?: number; color: string; strokeColor?: string };
 
-export const Icon = ({ name, size = 24, color }: IconProps) => {
+export const Icon = ({ name, size = 24, color, strokeColor }: IconProps) => {
   const stroke = { stroke: color, strokeWidth: 2.4, strokeLinecap: "round", strokeLinejoin: "round", fill: "none" } as const;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityElementsHidden importantForAccessibility="no">
@@ -29,8 +29,8 @@ export const Icon = ({ name, size = 24, color }: IconProps) => {
         <Path
           d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.3 1.3-6.5L2.5 9.3l6.6-.8z"
           fill={color}
-          stroke={color}
-          strokeWidth={1.2}
+          stroke={strokeColor ?? color}
+          strokeWidth={strokeColor ? 1.8 : 1.2}
           strokeLinejoin="round"
         />
       )}

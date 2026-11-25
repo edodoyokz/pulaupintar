@@ -16,10 +16,12 @@ type ProfileContextValue = {
   child: ChildProfile | null;
   children: ChildProfile[];
   dailyLimitMinutes: number;
+  usedTodaySeconds: number;
   /** True once today's learning time has reached the parent's limit. */
   limitReached: boolean;
   addChild: (name: string, age: number) => Promise<void>;
   updateChild: (name: string, age: number) => Promise<void>;
+  removeChild: (id: string) => Promise<void>;
   switchChild: (id: string) => Promise<void>;
   resetProgress: () => Promise<void>;
   recordSession: (result: SessionResult) => Promise<void>;
@@ -90,6 +92,15 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
     await update({ ...current, activeChildId: id });
   };
 
+  const removeChild = async (id: string) => {
+    const current = dataRef.current;
+    if (!current || current.children.length <= 1) return;
+    const remaining = current.children.filter((candidate) => candidate.id !== id);
+    if (remaining.length === current.children.length) return;
+    const activeChildId = current.activeChildId === id ? remaining[0].id : current.activeChildId;
+    await update({ ...current, activeChildId, children: remaining });
+  };
+
   const resetProgress = () =>
     updateActiveChild((profile) => ({
       ...profile,
@@ -127,9 +138,11 @@ export const ProfileProvider = ({ children }: { children: ReactNode }) => {
         child,
         children: data?.children ?? [],
         dailyLimitMinutes,
+        usedTodaySeconds: usedToday,
         limitReached: usedToday >= dailyLimitMinutes * 60,
         addChild,
         updateChild,
+        removeChild,
         switchChild,
         resetProgress,
         recordSession,
