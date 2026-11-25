@@ -12,7 +12,7 @@ import * as Speech from "expo-speech";
 import { useRef } from "react";
 import { Platform } from "react-native";
 import { requestSpeech, requestTranscript } from "@/api/client";
-import type { Lang, SpeechSegment, SttEncoding } from "@/api/types";
+import type { ListenHints, SpeechSegment, SttEncoding } from "@/api/types";
 
 const SAMPLE_RATE = 16_000;
 
@@ -181,14 +181,15 @@ export const useChildMicrophone = () => {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const liveListener = useRef<InstanceType<LiveVoice["Listener"]> | null>(null);
 
-  const start = async () => {
+  /** `hints`: the lesson's answer language and every word a child may answer with, so speech is heard in that language. */
+  const start = async (hints: ListenHints) => {
     const live = getLiveVoice();
     if (live && !liveListeningBroken) {
       const listener = new live.Listener();
       // Stored before the await, so leaving the lesson while the microphone starts still stops it.
       liveListener.current = listener;
       try {
-        await listener.start();
+        await listener.start(hints);
         return;
       } catch {
         liveListeningBroken = true;
@@ -201,7 +202,7 @@ export const useChildMicrophone = () => {
   };
 
   /** Throws when the recording or the speech-to-text call fails, so a failure never counts as a wrong answer. */
-  const stopAndTranscribe = async (expect: Lang, hints: string[]): Promise<string> => {
+  const stopAndTranscribe = async (hints: ListenHints): Promise<string> => {
     const listener = liveListener.current;
     if (listener) {
       liveListener.current = null;
@@ -223,8 +224,8 @@ export const useChildMicrophone = () => {
       audioBase64,
       encoding: ENCODING,
       sampleRateHertz: SAMPLE_RATE,
-      expect,
-      hints,
+      expect: hints.lang,
+      hints: hints.words,
     });
     return transcript;
   };

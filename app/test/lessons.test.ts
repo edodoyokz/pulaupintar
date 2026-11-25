@@ -10,7 +10,7 @@ import {
   SESSION_SIZE,
   starsFor,
 } from "../src/lessons/catalog";
-import { isCorrectAnswer } from "../src/tutor/grading";
+import { isCorrectAnswer, speechVocabulary } from "../src/tutor/grading";
 
 describe("grading", () => {
   it.each([
@@ -51,6 +51,18 @@ describe("grading", () => {
     expect(isCorrectAnswer("satu dua tiga empat", ["2"])).toBe(false);
     expect(isCorrectAnswer("satu dua tiga, tiga!", ["3"])).toBe(true);
     expect(isCorrectAnswer("tiga apel", ["3"])).toBe(true);
+  });
+
+  it("reads number words without their final h, as speech-to-text often writes them", () => {
+    expect(isCorrectAnswer("tuju", ["7"])).toBe(true);
+    expect(isCorrectAnswer("tuju belas", ["17"])).toBe(true);
+    expect(isCorrectAnswer("sepulu", ["10"])).toBe(true);
+    expect(isCorrectAnswer("tuju", ["8"])).toBe(false);
+  });
+
+  it("listens for the spoken form of number answers in the lesson's language", () => {
+    expect(speechVocabulary(["7", "12", "kiri"], "id")).toEqual(["7", "tujuh", "12", "dua belas", "kiri"]);
+    expect(speechVocabulary(["three", "3"], "en")).toEqual(["three", "3"]);
   });
 });
 

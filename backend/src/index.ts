@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { validateSpeechRequest } from "./safety";
 import { synthesize, transcribe } from "./speech";
 import { runLiveRelay, type RelaySocket } from "./live-relay";
+import { parseListenHints } from "./live-setup";
 import { connectLive, synthesizeWithGemini, transcribeWithGemini } from "./gemini-speech";
 import {
   openAiCompatibleModel,
@@ -177,10 +178,12 @@ app.post("/v1/stt", async (c) => {
 const liveRoute = (role: "speak" | "listen") => async (c: Context<{ Bindings: Env }>) => {
   if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.json({ error: "websocket required" }, 426);
   if (!c.env.GEMINI_API_KEY) return c.json({ error: "live voice not configured" }, 503);
+  // The listener's lesson language and answer words (?lang=id&word=dua&word=tiga), checked before Gemini sees them.
+  const hints = role === "listen" ? parseListenHints(c.req.query("lang"), c.req.queries("word") ?? []) : undefined;
   const upstream = await connectLive(c.env);
   const { 0: client, 1: server } = new WebSocketPair();
   server.accept();
-  runLiveRelay(c.env, role, server as unknown as RelaySocket, upstream);
+  runLiveRelay(c.env, role, server as unknown as RelaySocket, upstream, hints);
   return new Response(null, { status: 101, webSocket: client });
 };
 app.get("/v1/live/speak", liveRoute("speak"));

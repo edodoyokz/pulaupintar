@@ -1,4 +1,5 @@
 import { liveRelay } from "@/api/client";
+import type { ListenHints } from "@/api/types";
 import { frameToText, type LiveServerMessage } from "./pcm";
 
 const SETUP_TIMEOUT_MS = 6_000;
@@ -19,8 +20,9 @@ export type LiveConnection = {
 export const openLiveConnection = async (
   role: "speak" | "listen",
   handlers: { onMessage: (message: LiveServerMessage) => void; onClose: () => void },
+  hints?: ListenHints,
 ): Promise<LiveConnection> => {
-  const { url, headers } = liveRelay(role);
+  const { url, headers } = liveRelay(role, hints);
   return new Promise<LiveConnection>((resolve, reject) => {
     const socket = new NativeWebSocket(url, null, { headers });
     socket.binaryType = "arraybuffer";

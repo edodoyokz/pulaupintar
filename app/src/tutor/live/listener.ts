@@ -1,6 +1,7 @@
 import { AudioManager, AudioRecorder } from "react-native-audio-api";
 import { bytesToBase64, floatToPcm16, type LiveServerMessage } from "./pcm";
 import { openLiveConnection, type LiveConnection } from "./socket";
+import type { ListenHints } from "@/api/types";
 
 const INPUT_RATE = 16_000;
 /** 100 ms of audio per chunk. */
@@ -58,8 +59,8 @@ export class LiveListener {
     this.settleTimer = setTimeout(() => this.resolveWait(), SETTLE_AFTER_TRANSCRIPT_MS);
   }
 
-  /** Opens the session while the recorder starts, so the child can talk right away. */
-  async start() {
+  /** Opens the session while the recorder starts, so the child can talk right away. `hints` hold it to the lesson's language and answers. */
+  async start(hints: ListenHints) {
     this.clearWaitTimers();
     this.finalText = "";
     this.interimText = "";
@@ -68,13 +69,17 @@ export class LiveListener {
     this.settleResolve = null;
     this.waiting = [];
     this.live = null;
-    const opening = openLiveConnection("listen", {
-      onMessage: (message) => this.handle(message),
-      onClose: () => {
-        this.closed = true;
-        this.resolveWait();
+    const opening = openLiveConnection(
+      "listen",
+      {
+        onMessage: (message) => this.handle(message),
+        onClose: () => {
+          this.closed = true;
+          this.resolveWait();
+        },
       },
-    });
+      hints,
+    );
     this.opening = opening;
     opening.then(
       (connection) => {

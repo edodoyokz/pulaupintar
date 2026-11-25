@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { runLiveRelay, type RelaySocket } from "../src/live-relay";
+import { parseListenHints } from "../src/live-setup";
 import type { Env } from "../src/types";
 
 const env = { APP_TOKEN: "t", GEMINI_API_KEY: "k" } as Env;
@@ -103,6 +104,20 @@ describe("listen relay", () => {
     await settle();
     expect(upstream.sent[0].setup.model).toBe("models/gemini-3.5-transcribe-live");
     expect(upstream.sent.slice(1)).toEqual([chunk("QUJD"), { realtimeInput: { audioStreamEnd: true } }]);
+  });
+
+  it("holds Gemini to the lesson's language and answer words", () => {
+    const upstream = fakeSocket();
+    runLiveRelay(env, "listen", fakeSocket(), upstream, parseListenHints("en", ["red", "blue"]));
+    expect(upstream.sent[0].setup.inputAudioTranscription).toEqual({ languageCodes: ["en-US"], customVocabulary: ["red", "blue"] });
+  });
+
+  it("lets only a known language and short plain words through from the phone", () => {
+    const words = [" tujuh ", "tujuh", "", "x".repeat(41), "dua belas", "good-bye", "a<script>", "{}", ...Array.from({ length: 120 }, (_, i) => `w${i}`)];
+    const hints = parseListenHints("fr", words);
+    expect(hints.lang).toBeUndefined();
+    expect(hints.words.slice(0, 3)).toEqual(["tujuh", "dua belas", "good-bye"]);
+    expect(hints.words).toHaveLength(100);
   });
 
   it("drops text, other formats, oversized chunks and anything past the audio budget", async () => {

@@ -3,7 +3,7 @@ import { requestTutorTurn } from "@/api/client";
 import type { SpeechSegment, TutorTurnRequest } from "@/api/types";
 import { starsFor, type AppItem, type Lesson } from "@/lessons/catalog";
 import type { ChildProfile } from "@/profile/storage";
-import { isCorrectAnswer } from "./grading";
+import { isCorrectAnswer, speechVocabulary } from "./grading";
 import { speak, stopSpeaking, useChildMicrophone } from "./voice";
 
 export type SessionPhase = "idle" | "speaking" | "your-turn" | "listening" | "checking" | "done";
@@ -34,6 +34,10 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
   const startedAt = useRef(Date.now());
   const closed = useRef(false);
   const lessonAnswers = useMemo(() => lesson.pool.flatMap((item) => item.answers), [lesson]);
+  const listenHints = useMemo(
+    () => ({ lang: lesson.answerLang, words: speechVocabulary(lessonAnswers, lesson.answerLang) }),
+    [lesson, lessonAnswers],
+  );
 
   const setPhase = (next: SessionPhase) => {
     phaseRef.current = next;
@@ -145,7 +149,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
       if (phaseRef.current !== "your-turn") return;
       setPhase("listening");
       try {
-        await microphone.start();
+        await microphone.start(listenHints);
       } catch {
         await retryTurn();
       }
@@ -158,7 +162,7 @@ export const useTutorSession = (lesson: Lesson, child: ChildProfile, items: AppI
       const item = items[itemIndex];
       let childSaid: string;
       try {
-        childSaid = await microphone.stopAndTranscribe(lesson.answerLang, item.answers);
+        childSaid = await microphone.stopAndTranscribe(listenHints);
       } catch {
         await retryTurn();
         return;

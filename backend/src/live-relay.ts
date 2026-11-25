@@ -1,4 +1,4 @@
-import { liveSetup, type LiveRole } from "./live-setup";
+import { liveSetup, type ListenHints, type LiveRole } from "./live-setup";
 import { validateSpeechRequest } from "./safety";
 import type { Env } from "./types";
 
@@ -42,10 +42,10 @@ const parse = async (data: unknown): Promise<Json | null> => {
  * - speak: the phone sends `{segments}`; they go through the same checks as /v1/tts, and only audio and
  *   the end of the turn come back.
  * - listen: the phone sends microphone audio (16 kHz PCM, limited in size) and the end of the stream; only
- *   transcriptions come back.
+ *   transcriptions come back. The session is held to the lesson's language and answer words (`hints`).
  * Anything else, in either direction, is dropped.
  */
-export const runLiveRelay = (env: Env, role: LiveRole, client: RelaySocket, upstream: RelaySocket): void => {
+export const runLiveRelay = (env: Env, role: LiveRole, client: RelaySocket, upstream: RelaySocket, hints?: ListenHints): void => {
   let ready = false;
   let closed = false;
   let turnActive = false;
@@ -148,5 +148,5 @@ export const runLiveRelay = (env: Env, role: LiveRole, client: RelaySocket, upst
     socket.addEventListener("close", () => closeAll());
     socket.addEventListener("error", () => closeAll(1011, "error"));
   }
-  upstream.send(JSON.stringify({ setup: liveSetup(env, role) }));
+  upstream.send(JSON.stringify({ setup: liveSetup(env, role, hints) }));
 };

@@ -1,4 +1,4 @@
-import type { SpeechSegment, SttRequest, TutorTurnRequest, TutorTurnResponse } from "./types";
+import type { ListenHints, SpeechSegment, SttRequest, TutorTurnRequest, TutorTurnResponse } from "./types";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8787";
 const APP_TOKEN = process.env.EXPO_PUBLIC_APP_TOKEN ?? "";
@@ -31,8 +31,15 @@ export const requestSpeech = (segments: SpeechSegment[]) =>
 export const requestTranscript = (request: SttRequest) =>
   post<{ transcript: string }>("/v1/stt", request);
 
-/** Websocket address and headers for the Worker's Gemini Live relay (the phone holds no Gemini token). */
-export const liveRelay = (role: "speak" | "listen") => ({
-  url: `${API_URL.replace(/^http/, "ws")}/v1/live/${role}`,
-  headers: { "x-app-token": APP_TOKEN },
-});
+/**
+ * Websocket address and headers for the Worker's Gemini Live relay (the phone holds no Gemini token).
+ * A listener also tells the Worker the lesson's language and answer words, which it checks and passes to Gemini.
+ */
+export const liveRelay = (role: "speak" | "listen", hints?: ListenHints) => {
+  // Built by hand: React Native's URLSearchParams lacks most methods.
+  const query = hints ? [`lang=${hints.lang}`, ...hints.words.map((word) => `word=${encodeURIComponent(word)}`)].join("&") : "";
+  return {
+    url: `${API_URL.replace(/^http/, "ws")}/v1/live/${role}${query ? `?${query}` : ""}`,
+    headers: { "x-app-token": APP_TOKEN },
+  };
+};

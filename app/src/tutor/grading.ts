@@ -21,12 +21,28 @@ const NUMBER_PHRASES: Record<Lang, string[]> = {
   en: Object.keys(NUMBER_WORDS.en).sort((a, b) => b.length - a.length),
 };
 
+// Indonesian speech-to-text often drops a final "h" ("tujuh" comes back as "tuju"); read those as the number word.
+const SPOKEN_SPELLINGS: Record<Lang, Record<string, string>> = { id: { tuju: "tujuh", sepulu: "sepuluh" }, en: {} };
+
+/**
+ * The words a child may say in a lesson, for speech recognition to listen for: every answer, plus the
+ * spoken form of number answers ("7" is said "tujuh" or "seven"). All answers, not just the right one,
+ * so a wrong answer is still heard as it was said.
+ */
+export const speechVocabulary = (answers: string[], lang: Lang): string[] => {
+  const spoken = Object.entries(NUMBER_WORDS[lang]);
+  return [
+    ...new Set(answers.flatMap((answer) => [answer, ...spoken.filter(([, digits]) => digits === answer).map(([word]) => word)])),
+  ];
+};
+
 // Dropped only from what the child said, never from an expected answer, and only when
 // other words remain: "em, be" is "be", but a lone "em" (the letter M) or "kak" (K) stays.
 const FILLER_WORDS = new Set(["eh", "em", "emm", "hmm", "ehm", "itu", "ya", "kak", "jawabannya", "adalah", "the", "it's", "is"]);
 
 const toWords = (text: string, lang: Lang): string[] => {
-  let normalized = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\s+/g, " ").trim()} `;
+  const words = text.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").trim().split(/\s+/);
+  let normalized = ` ${words.map((word) => SPOKEN_SPELLINGS[lang][word] ?? word).join(" ")} `;
   for (const phrase of NUMBER_PHRASES[lang]) {
     normalized = normalized.replaceAll(` ${phrase} `, ` ${NUMBER_WORDS[lang][phrase]} `);
   }

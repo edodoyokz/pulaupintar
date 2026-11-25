@@ -34,3 +34,6 @@ export type SttRequest = {
   expect: Lang;
   hints?: string[];
 };
+
+/** What the listener is told about a lesson: the answer language and every word a child may answer with. */
+export type ListenHints = { lang: Lang; words: string[] };
