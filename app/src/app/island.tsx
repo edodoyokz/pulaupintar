@@ -58,7 +58,12 @@ const Island = () => {
           </View>
 
           <View style={styles.greeting}>
-            <KakPinta size={104} mood={limitReached && !speaking ? "happy" : "talk"} />
+            {/* After the greeting Kak Pinta glances down at the three places, so the child looks there too. */}
+            <KakPinta
+              size={104}
+              mood={limitReached ? "calm" : "talk"}
+              gaze={speaking || limitReached ? { x: 0, y: 0 } : { x: 0.5, y: 1 }}
+            />
             <View style={styles.bubble}>
               <Text style={styles.bubbleText}>
                 {limitReached

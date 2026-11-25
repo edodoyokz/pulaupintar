@@ -13,6 +13,7 @@ import { useRef } from "react";
 import { Platform } from "react-native";
 import { requestSpeech, requestTranscript } from "@/api/client";
 import type { ListenHints, SpeechSegment, SttEncoding } from "@/api/types";
+import { levelFromSamples, meterSyllables, setAudioLevel } from "./live/levels";
 
 const SAMPLE_RATE = 16_000;
 
@@ -90,18 +91,38 @@ const playFile = (uri: string) =>
     const player = createAudioPlayer({ uri });
     let settled = false;
     let timer = setTimeout(() => finish(new Error("audio did not load")), LOAD_TIMEOUT_MS);
+    // The beak keeps a syllable rhythm until the player hands over real samples, if it ever does.
+    let stopSyllables: (() => void) | null = null;
 
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       subscription.remove();
+      samples?.remove();
+      stopSyllables?.();
+      setAudioLevel("speech", 0);
       player.remove();
       if (stopActiveClip === stop) stopActiveClip = null;
       if (error) reject(error);
       else resolve();
     };
     const stop = () => finish();
+
+    let samples: { remove: () => void } | null = null;
+    if (player.isAudioSamplingSupported) {
+      try {
+        player.setAudioSamplingEnabled(true);
+        samples = player.addListener("audioSampleUpdate", (sample) => {
+          stopSyllables?.();
+          stopSyllables = null;
+          const frames = sample.channels[0]?.frames;
+          if (frames) setAudioLevel("speech", levelFromSamples(frames));
+        });
+      } catch {
+        samples = null;
+      }
+    }
 
     const subscription = player.addListener("playbackStatusUpdate", (status) => {
       if (status.didJustFinish) {
@@ -118,6 +139,7 @@ const playFile = (uri: string) =>
 
     stopActiveClip?.();
     stopActiveClip = stop;
+    stopSyllables = meterSyllables("speech");
     player.play();
   });
 
@@ -135,12 +157,17 @@ const speakOnDevice = async (segments: SpeechSegment[], generation: number) => {
   for (const segment of segments) {
     if (generation !== speechGeneration) return;
     await new Promise<void>((resolve) => {
+      const stopSyllables = meterSyllables("speech");
+      const done = () => {
+        stopSyllables();
+        resolve();
+      };
       Speech.speak(segment.text, {
         language: segment.lang === "en" ? "en-US" : "id-ID",
         rate: 0.9,
-        onDone: resolve,
-        onError: () => resolve(),
-        onStopped: resolve,
+        onDone: done,
+        onError: done,
+        onStopped: done,
       });
     });
   }

@@ -16,7 +16,7 @@ import { useProfile } from "@/profile/profile-context";
 import type { ChildProfile } from "@/profile/storage";
 import { useTutorSession } from "@/tutor/use-tutor-session";
 import { Icon } from "@/ui/icons";
-import { KakPinta, type KakPintaMood } from "@/ui/kak-pinta";
+import { KakPinta, type KakPintaGaze, type KakPintaMood } from "@/ui/kak-pinta";
 import { ObjectShape, PictureView } from "@/ui/picture";
 import { BackButton, BigButton, CircleButton, ProgressDashes } from "@/ui/primitives";
 import { colors, fonts, layout, radius, spacing } from "@/ui/theme";
@@ -167,6 +167,16 @@ const Session = ({
   const tutorMood: KakPintaMood =
     session.phase === "listening" ? "listen" : session.phase === "checking" ? "think" : "talk";
   const tutorReaction = session.feedback === "none" ? undefined : session.feedback;
+  // The card and the microphone are both below Kak Pinta: it looks at the card while asking or showing
+  // the answer, at the microphone when it is the child's turn, and up while it thinks.
+  const tutorGaze: KakPintaGaze =
+    session.phase === "checking"
+      ? { x: 0.6, y: -1 }
+      : session.phase === "your-turn"
+        ? { x: 0, y: 1 }
+        : session.phase === "speaking" && (session.feedback === "none" || session.feedback === "reveal")
+          ? { x: 0, y: 0.7 }
+          : { x: 0, y: 0 };
 
   const hintText = listening
     ? "Bicara sekarang, lalu tekan kotak merah"
@@ -210,6 +220,7 @@ const Session = ({
             size={compact ? 116 : 148}
             mood={tutorMood}
             reaction={tutorReaction}
+            gaze={tutorGaze}
           />
           {(session.heard !== "" || session.feedback !== "none") && (
             <View style={styles.statusPills}>
@@ -368,7 +379,8 @@ const Reward = ({
                 : "Kamu menyelesaikan level ini."
               : "Ayo coba lagi supaya level berikutnya terbuka."}
           </Text>
-          <KakPinta size={180} mood="happy" />
+          {/* A pass gets the hop-and-flap celebration; a miss gets an encouraging nod instead. */}
+          <KakPinta size={180} mood={passed ? "happy" : "talk"} reaction={passed ? undefined : "hint"} />
           {passed && (
             <View style={styles.sticker}>
               <View style={styles.stickerIcon}>
@@ -424,7 +436,7 @@ const TimeUp = ({ childName }: { childName: string }) => (
       <View style={styles.rewardInner}>
         <Text style={styles.rewardTitle}>Waktunya istirahat</Text>
         <Text style={styles.rewardText}>{`Hari ini ${childName} sudah belajar banyak. Besok kita belajar lagi, ya!`}</Text>
-        <KakPinta size={180} mood="happy" />
+        <KakPinta size={180} mood="calm" />
         <View style={styles.rewardFooter}>
           <BigButton label="Kembali ke pulau" color={colors.green} shadow={colors.greenDark} onPress={() => router.dismissTo("/island")} />
         </View>

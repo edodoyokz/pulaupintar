@@ -11,7 +11,7 @@ const Index = () => {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.content}>
-          <KakPinta size={112} mood="happy" />
+          <KakPinta size={112} mood="calm" />
           <Text style={styles.title}>Pulau Pintar</Text>
           <Text style={styles.subtitle}>Menyiapkan profil belajar...</Text>
           <ActivityIndicator size="large" color={colors.blue} style={styles.spinner} />

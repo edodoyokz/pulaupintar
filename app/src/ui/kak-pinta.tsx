@@ -4,21 +4,28 @@ import { Alignment, Fit, RiveView, useRive, useRiveFile, type RiveViewRef } from
 import { useReducedMotion } from "react-native-reanimated";
 import { getAudioLevel } from "@/tutor/live/levels";
 
-export type KakPintaMood = "talk" | "listen" | "think" | "happy";
+/** "calm" is the settled happy pose without the celebration hop, for rest and loading screens. */
+export type KakPintaMood = "talk" | "listen" | "think" | "happy" | "calm";
 
 /** A short reaction played over the current mood. */
 export type KakPintaReaction = "correct" | "hint" | "reveal";
+
+/** Where Kak Pinta looks: x -1 left .. 1 right, y -1 up .. 1 down. */
+export type KakPintaGaze = { x: number; y: number };
 
 export type KakPintaProps = {
   size?: number;
   mood?: KakPintaMood;
   /** Reaction to play; set it back to undefined to re-arm the same reaction for the next item. */
   reaction?: KakPintaReaction;
+  gaze?: KakPintaGaze;
 };
 
-/** Order matches the mood states in the Rive file; 4 is the calm pose used for reduced motion. */
-const MOOD_VALUE: Record<KakPintaMood, number> = { talk: 0, listen: 1, think: 2, happy: 3 };
-const CALM_MOOD = 4;
+const FORWARD: KakPintaGaze = { x: 0, y: 0 };
+const clampUnit = (value: number) => Math.max(-1, Math.min(1, value));
+
+/** Order matches the mood states in the Rive file. Reduced Motion swaps the celebration for the calm pose. */
+const MOOD_VALUE: Record<KakPintaMood, number> = { talk: 0, listen: 1, think: 2, happy: 3, calm: 4 };
 
 /** Artboard size in the .riv file, so the Pressable keeps the same proportions. */
 const ARTBOARD = { width: 240, height: 256 };
@@ -30,7 +37,7 @@ const ARTBOARD = { width: 240, height: 256 };
  * the artwork decides how the body moves. Levels come from the real audio graph, so the mouth opens
  * on syllables instead of a canned loop.
  */
-export const KakPinta = ({ size = 160, mood = "talk", reaction }: KakPintaProps) => {
+export const KakPinta = ({ size = 160, mood = "talk", reaction, gaze = FORWARD }: KakPintaProps) => {
   const reducedMotion = useReducedMotion();
   const { riveFile, error } = useRiveFile(require("../../assets/rive/kak-pinta.riv"));
   const { riveViewRef, setHybridRef } = useRive();
@@ -46,10 +53,16 @@ export const KakPinta = ({ size = 160, mood = "talk", reaction }: KakPintaProps)
 
   useEffect(() => {
     if (!view) return;
-    const calm = reducedMotion && MOOD_VALUE[mood] === MOOD_VALUE.happy;
-    view.setNumberInputValue("mood", calm ? CALM_MOOD : MOOD_VALUE[mood]);
+    view.setNumberInputValue("mood", reducedMotion && mood === "happy" ? MOOD_VALUE.calm : MOOD_VALUE[mood]);
     view.setBooleanInputValue("reducedMotion", reducedMotion);
   }, [view, mood, reducedMotion]);
+
+  // Eyes point at what the child should look at: the picture card, the microphone, or the child.
+  useEffect(() => {
+    if (!view) return;
+    view.setNumberInputValue("gazeX", clampUnit(gaze.x));
+    view.setNumberInputValue("gazeY", clampUnit(gaze.y));
+  }, [view, gaze.x, gaze.y]);
 
   // Clearing the reaction re-arms it, so the next item can react the same way.
   useEffect(() => {

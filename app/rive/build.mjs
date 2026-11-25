@@ -187,7 +187,8 @@ const animations = [
   ] },
   // gaze blends
   ...[["gaze_l", -4.5], ["gaze_c", 0], ["gaze_r", 4.5]].map(([name, x]) => ({ name, fps: FPS, duration: 1, loop: "oneShot", tracks: [hold("eyesGX", "x", x)] })),
-  ...[["gaze_u", -3.5], ["gaze_m", 0], ["gaze_d", 3.5]].map(([name, y]) => ({ name, fps: FPS, duration: 1, loop: "oneShot", tracks: [hold("eyesGY", "y", y)] })),
+  // The beak sits right under the eyes, so looking down travels less than looking up.
+  ...[["gaze_u", -3.5], ["gaze_m", 0], ["gaze_d", 1.8]].map(([name, y]) => ({ name, fps: FPS, duration: 1, loop: "oneShot", tracks: [hold("eyesGY", "y", y)] })),
   // child's mic level
   { name: "listen_0", fps: FPS, duration: 1, loop: "oneShot", tracks: [hold("crestListen", "rotation", 0), hold("accWavesLvl", "scaleX", 1), hold("accWavesLvl", "scaleY", 1)] },
   { name: "listen_1", fps: FPS, duration: 1, loop: "oneShot", tracks: [hold("crestListen", "rotation", 7), hold("accWavesLvl", "scaleX", 1.3), hold("accWavesLvl", "scaleY", 1.3)] },
@@ -268,7 +269,6 @@ const stateMachine = {
         ...REACTS.map((r) => ({ from: `react_${r}`, to: "react_rest", exitTimeMs: durOf(`react_${r}`), durationMs: 120 })),
       ] },
   ],
-  listeners: [{ target: "react", type: "click", actions: [{ input: "tap" }] }],
 };
 
 // ---- run ----
@@ -276,7 +276,9 @@ const transport = new StdioClientTransport({
   command: process.execPath,
   args: [resolve(HERE, "..", "node_modules/rive-mcp-server/dist/index.js")],
   cwd: HERE,
-  env: { ...process.env, RIVE_MCP_CHROME: "/usr/bin/google-chrome" }, stderr: "ignore",
+  // rive-mcp finds Chrome/Edge/Chromium itself; RIVE_MCP_CHROME in the environment overrides it.
+  env: { ...process.env },
+  stderr: "ignore",
 });
 const client = new Client({ name: "build", version: "1" });
 await client.connect(transport);
