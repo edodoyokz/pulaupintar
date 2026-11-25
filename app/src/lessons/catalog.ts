@@ -247,8 +247,8 @@ const INGGRIS_LEVELS: Omit<Lesson, "id" | "subject" | "level">[] = [
     answerLang: "en",
     sticker: { name: "Tubuh Sehat", object: "apple" },
     pool: [
-      translate("mata", ["eye", "eyes"], "anggota tubuh"), translate("hidung", ["nose"], "anggota tubuh"),
-      translate("mulut", ["mouth"], "anggota tubuh"), translate("tangan", ["hand", "hands"], "anggota tubuh"),
+      translate("mata", ["eye", "eyes"], "anggota tubuh"), translate("hidung", ["nose", "noses"], "anggota tubuh"),
+      translate("mulut", ["mouth", "mouths"], "anggota tubuh"), translate("tangan", ["hand", "hands"], "anggota tubuh"),
       translate("kaki", ["foot", "feet", "leg", "legs"], "anggota tubuh"), translate("telinga", ["ear", "ears"], "anggota tubuh"),
     ],
   },
