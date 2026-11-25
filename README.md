@@ -18,14 +18,14 @@ Alur satu giliran: tutor berbicara (LLM → filter keamanan → TTS), anak menek
 ```bash
 cd backend
 npm install
-cp .dev.vars.example .dev.vars   # isi POLLINATIONS_API_KEY, GOOGLE_CLOUD_API_KEY, APP_TOKEN
+cp .dev.vars.example .dev.vars   # isi SUMOPOD_API_KEY, GOOGLE_CLOUD_API_KEY, APP_TOKEN
 npm run dev                      # http://localhost:8787
 npm test
 ```
 
 - `GOOGLE_CLOUD_API_KEY` perlu mengaktifkan Cloud Text-to-Speech API dan Cloud Speech-to-Text API.
 - `APP_TOKEN` adalah kata sandi bersama antara aplikasi dan backend, supaya orang lain tidak bisa memakai API key.
-- Deploy: `npx wrangler secret put POLLINATIONS_API_KEY` (dan seterusnya), lalu `npm run deploy`.
+- Deploy: `npx wrangler secret put SUMOPOD_API_KEY` (dan seterusnya), lalu `npm run deploy`.
 - Setiap panggilan AI mencatat log `{"event":"cost", ...}` untuk menghitung biaya per sesi (dasar harga langganan nanti).
 
 ## Menjalankan aplikasi

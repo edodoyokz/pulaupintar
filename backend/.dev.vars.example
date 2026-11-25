@@ -1,5 +1,5 @@
-# Which LLM service writes Kak Pinta's lines: pollinations (default), sumopod or claude
-TUTOR_PROVIDER=pollinations
+# Which LLM service writes Kak Pinta's lines: sumopod (set in wrangler.jsonc), pollinations or claude
+TUTOR_PROVIDER=sumopod
 # Secret key (sk_...) from enter.pollinations.ai
 POLLINATIONS_API_KEY=
 # API key (sk-...) from ai.sumopod.com, used when TUTOR_PROVIDER=sumopod
@@ -10,7 +10,7 @@ TUTOR_REASONING_EFFORT=low
 # Optional: a second model that checks every line before the child hears it.
 # Leave empty to turn the check off. Provider defaults to the tutor's provider.
 SAFETY_MODEL=jev-1.14.0
-SAFETY_PROVIDER=
+SAFETY_PROVIDER=sumopod
 # Only needed when TUTOR_PROVIDER=claude
 ANTHROPIC_API_KEY=
 GOOGLE_CLOUD_API_KEY=

@@ -3,5 +3,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Non-secret model settings. API keys go in secrets: npx wrangler secret put SUMOPOD_API_KEY
+  "vars": {
+    "TUTOR_PROVIDER": "sumopod",
+    "TUTOR_MODEL": "hy4-flash",
+    "SAFETY_PROVIDER": "sumopod",
+    "SAFETY_MODEL": "jev-1.14.0"
+  }
 }
