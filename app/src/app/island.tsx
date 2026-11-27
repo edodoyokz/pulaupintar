@@ -11,6 +11,9 @@ import { PlaceIcon } from "@/ui/place-icon";
 import { webCursor } from "@/ui/primitives";
 import { colors, fonts, layout, radius, spacing, type } from "@/ui/theme";
 
+/** Greetings already spoken in this app run: coming back from a lesson should not repeat "Halo" every time. */
+const greeted = new Set<string>();
+
 const Island = () => {
   const { child, limitReached } = useProfile();
   const childName = child?.name;
@@ -25,10 +28,12 @@ const Island = () => {
         : `Halo ${childName}! Mau belajar di mana hari ini?`;
       prepareAudio()
         .then(async () => {
-          if (!active) return;
+          if (!active || greeted.has(greeting)) return;
+          greeted.add(greeting);
           setSpeaking(true);
           try {
-            await speak([{ lang: "id", text: greeting }]);
+            // The greeting only changes with the name, so its audio is kept and the next launch greets at once.
+            await speak([{ lang: "id", text: greeting }], { persist: true });
           } finally {
             if (active) setSpeaking(false);
           }

@@ -53,6 +53,8 @@ const RECORDING_OPTIONS: RecordingOptions = {
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
   },
+  // The level drives Kak Pinta's crest and the automatic end of the child's answer on this path too.
+  isMeteringEnabled: true,
   web: {},
 };
 
@@ -173,12 +175,19 @@ const speakOnDevice = async (segments: SpeechSegment[], generation: number) => {
   }
 };
 
-export const speak = async (segments: SpeechSegment[]): Promise<void> => {
+/** Opens the voice session ahead of a line whose text is still being written by the tutor. */
+export const prepareVoice = () => getLiveVoice()?.speaker.prepare();
+
+/** The right-answer chime; silent where the native audio module is missing (Expo Go). */
+export const playChime = () => getLiveVoice()?.speaker.chime();
+
+/** `persist`: the text never changes (a teaching line, a retry), so its audio is kept for later runs. */
+export const speak = async (segments: SpeechSegment[], options: { persist?: boolean } = {}): Promise<void> => {
   const generation = speechGeneration;
   const live = getLiveVoice();
   if (live) {
     try {
-      await live.speaker.speak(segments);
+      await live.speaker.speak(segments, options);
       return;
     } catch {
       // Live can't be reached: fall back to the voice that comes back as a file.
@@ -205,6 +214,12 @@ export const speak = async (segments: SpeechSegment[]): Promise<void> => {
 export const useChildMicrophone = () => {
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const liveListener = useRef<InstanceType<LiveVoice["Listener"]> | null>(null);
+  const meterTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopMeter = () => {
+    clearInterval(meterTimer.current ?? undefined);
+    meterTimer.current = null;
+    setAudioLevel("listen", 0);
+  };
   // The start still in progress, so stop and cancel never run while the microphone is half started.
   const pendingStart = useRef<Promise<void> | null>(null);
   const settleStart = async () => {
@@ -229,6 +244,12 @@ export const useChildMicrophone = () => {
     }
     await recorder.prepareToRecordAsync();
     recorder.record();
+    stopMeter();
+    meterTimer.current = setInterval(() => {
+      const decibels = recorder.getStatus().metering;
+      // Metering is dBFS (0 is full scale); the same RMS scale as the live microphone.
+      if (decibels !== undefined) setAudioLevel("listen", Math.min(1, 10 ** (decibels / 20) * 3.4));
+    }, 100);
   };
 
   const start = (hints: ListenHints): Promise<void> => {
@@ -254,6 +275,7 @@ export const useChildMicrophone = () => {
         throw error;
       }
     }
+    stopMeter();
     await recorder.stop();
     if (!recorder.uri) throw new Error("nothing was recorded");
     const audioBase64 = await new File(recorder.uri).base64();
@@ -272,6 +294,7 @@ export const useChildMicrophone = () => {
     const listener = liveListener.current;
     liveListener.current = null;
     await listener?.cancel().catch(() => undefined);
+    stopMeter();
     if (recorder.isRecording) await recorder.stop().catch(() => undefined);
   };
 

@@ -1,8 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
-import { Alignment, Fit, RiveView, useRive, useRiveFile, type RiveViewRef } from "@rive-app/react-native";
+import { Alignment, Fit, RiveFileFactory, RiveView, useRive, type RiveFile, type RiveViewRef } from "@rive-app/react-native";
 import { useReducedMotion } from "react-native-reanimated";
 import { getAudioLevel } from "@/tutor/live/levels";
+
+// One parsed file for the whole app: every screen shows Kak Pinta, and a file already loaded renders on the
+// first frame instead of flashing an empty box while it is parsed again.
+let sharedFile: RiveFile | null = null;
+let loadingFile: Promise<RiveFile> | null = null;
+const loadKakPintaFile = () =>
+  (loadingFile ??= RiveFileFactory.fromSource(require("../../assets/rive/kak-pinta.riv"), undefined).then(
+    (file) => (sharedFile = file),
+    (error: unknown) => {
+      loadingFile = null; // a later mount tries again
+      throw error;
+    },
+  ));
+
+const useKakPintaFile = () => {
+  const [file, setFile] = useState<RiveFile | null>(sharedFile);
+  useEffect(() => {
+    if (file) return;
+    let mounted = true;
+    loadKakPintaFile().then(
+      (loaded) => mounted && setFile(loaded),
+      (error: unknown) => console.warn("[rive] Kak Pinta failed to load:", error),
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [file]);
+  return file;
+};
 
 /** "calm" is the settled happy pose without the celebration hop, for rest and loading screens. */
 export type KakPintaMood = "talk" | "listen" | "think" | "happy" | "calm";
@@ -39,7 +68,7 @@ const ARTBOARD = { width: 240, height: 256 };
  */
 export const KakPinta = ({ size = 160, mood = "talk", reaction, gaze = FORWARD }: KakPintaProps) => {
   const reducedMotion = useReducedMotion();
-  const { riveFile, error } = useRiveFile(require("../../assets/rive/kak-pinta.riv"));
+  const riveFile = useKakPintaFile();
   const { riveViewRef, setHybridRef } = useRive();
   const [pressed, setPressed] = useState(false);
   const lastReaction = useRef<KakPintaReaction | undefined>(undefined);
@@ -94,8 +123,6 @@ export const KakPinta = ({ size = 160, mood = "talk", reaction, gaze = FORWARD }
     }, 60);
     return () => clearInterval(timer);
   }, [view]);
-
-  if (error) console.warn("[rive] Kak Pinta failed to load:", error.message);
 
   return (
     <Pressable

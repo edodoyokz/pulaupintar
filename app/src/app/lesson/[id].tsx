@@ -1,4 +1,4 @@
-import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams, usePreventRemove } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, {
@@ -107,6 +107,9 @@ const Session = ({
   const { height } = useWindowDimensions();
   const compact = height < 720;
   const [confirmExit, setConfirmExit] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  /** The back gesture that was held for the exit question, replayed when the child chooses to leave. */
+  const heldBack = useRef<(() => void) | null>(null);
   const [items] = useState<AppItem[]>(() => pickSessionItems(lesson));
   const [alreadyCompleted] = useState(() => child.completedLessons.includes(lesson.id));
   const { recordSession, recordUsage } = useProfile();
@@ -135,9 +138,11 @@ const Session = ({
   // Leaving early still counts toward the parent's daily limit.
   const elapsedSeconds = session.elapsedSeconds;
   const recordUsageRef = useRef(recordUsage);
-  recordUsageRef.current = recordUsage;
   const elapsedRef = useRef(elapsedSeconds);
-  elapsedRef.current = elapsedSeconds;
+  useEffect(() => {
+    recordUsageRef.current = recordUsage;
+    elapsedRef.current = elapsedSeconds;
+  });
   useEffect(
     () => () => {
       if (!started.current || recorded.current) return;
@@ -146,6 +151,18 @@ const Session = ({
     },
     [],
   );
+
+  // A swipe or the Android back button mid-lesson asks first, like the close button: a small thumb slips easily.
+  usePreventRemove(session.phase !== "done" && !leaving, ({ repeat }) => {
+    heldBack.current = repeat;
+    setConfirmExit(true);
+  });
+  useEffect(() => {
+    if (!leaving) return;
+    const leave = heldBack.current ?? (() => router.back());
+    heldBack.current = null;
+    leave();
+  }, [leaving]);
 
   if (session.phase === "done") {
     return (
@@ -179,7 +196,7 @@ const Session = ({
           : { x: 0, y: 0 };
 
   const hintText = listening
-    ? "Bicara sekarang, lalu tekan kotak merah"
+    ? "Kak Pinta mendengarkan..."
     : micEnabled
       ? "Tekan mikrofon lalu jawab"
       : session.phase === "checking"
@@ -299,25 +316,33 @@ const Session = ({
         onRequestClose={() => setConfirmExit(false)}
       >
         <View style={styles.modalBackdrop}>
+          {/* Few words and big pictures: the child cannot read yet, so the buttons say it with icons and colour. */}
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Keluar dari pelajaran?</Text>
-            <Text style={styles.modalBody}>Progres soal di sesi ini belum tersimpan.</Text>
+            <View style={styles.modalTutor}>
+              <KakPinta size={88} mood="calm" />
+            </View>
+            <Text style={styles.modalTitle}>Berhenti dulu?</Text>
             <View style={styles.modalActions}>
               <Pressable
-                onPress={() => setConfirmExit(false)}
+                onPress={() => {
+                  heldBack.current = null;
+                  setConfirmExit(false);
+                }}
                 style={({ pressed }) => [
                   styles.modalBtnPrimary,
                   Platform.OS === "web" && styles.pointer,
                   pressed && styles.modalBtnPressed,
                 ]}
                 accessibilityRole="button"
+                accessibilityLabel="Lanjut belajar"
               >
-                <Text style={styles.modalBtnPrimaryText}>Lanjut belajar</Text>
+                <Icon name="play" size={30} color={colors.white} />
+                <Text style={styles.modalBtnPrimaryText}>Lanjut</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
                   setConfirmExit(false);
-                  router.back();
+                  setLeaving(true);
                 }}
                 style={({ pressed }) => [
                   styles.modalBtnSecondary,
@@ -325,7 +350,9 @@ const Session = ({
                   pressed && styles.modalBtnPressed,
                 ]}
                 accessibilityRole="button"
+                accessibilityLabel="Keluar dari pelajaran"
               >
+                <Icon name="close" size={26} color={colors.inkBody} />
                 <Text style={styles.modalBtnSecondaryText}>Keluar</Text>
               </Pressable>
             </View>
@@ -563,21 +590,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     gap: 12,
   },
-  modalTitle: { fontFamily: fonts.display, fontSize: 24, color: colors.ink },
-  modalBody: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23, color: colors.inkBody },
-  modalActions: { gap: 10, marginTop: 4 },
+  modalTutor: { alignItems: "center" },
+  modalTitle: { fontFamily: fonts.display, fontSize: 28, color: colors.ink, textAlign: "center" },
+  modalActions: { gap: 12, marginTop: 4 },
   modalBtnPrimary: {
-    minHeight: 48,
-    borderRadius: radius.md,
+    minHeight: 64,
+    flexDirection: "row",
+    gap: 10,
+    borderRadius: radius.lg,
     backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
-  modalBtnPrimaryText: { fontFamily: fonts.bodyHeavy, fontSize: 16, color: colors.white },
+  modalBtnPrimaryText: { fontFamily: fonts.display, fontSize: 24, color: colors.white },
   modalBtnSecondary: {
-    minHeight: 48,
-    borderRadius: radius.md,
+    minHeight: 56,
+    flexDirection: "row",
+    gap: 10,
+    borderRadius: radius.lg,
     backgroundColor: colors.paper,
     borderWidth: 1.5,
     borderColor: colors.borderControl,
@@ -585,7 +616,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 16,
   },
-  modalBtnSecondaryText: { fontFamily: fonts.bodyHeavy, fontSize: 16, color: colors.inkBody },
+  modalBtnSecondaryText: { fontFamily: fonts.display, fontSize: 20, color: colors.inkBody },
   modalBtnPressed: { opacity: 0.86, transform: [{ scale: 0.98 }] },
   fallbackWrap: { flex: 1, justifyContent: "center", maxWidth: layout.maxWidth, width: "100%", alignSelf: "center" },
   fallbackCard: { gap: 14, padding: 20, borderRadius: 24, backgroundColor: colors.white },
