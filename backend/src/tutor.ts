@@ -10,10 +10,13 @@ export const OPENAI_COMPATIBLE_PROVIDERS = {
   gemini: { url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-3.1-flash-lite" },
 } as const;
 
-/** The main writer (deepseek-v4.1-flash:netra on Sumopod, reasoning off) takes 0.6-2 s; slower spikes go to the backup. */
-export const TUTOR_CALL_TIMEOUT_MS = 5_000;
-/** The backup writer (claude-haiku-5-5 on Sumopod) takes about 5 s. */
-export const TUTOR_BACKUP_TIMEOUT_MS = 9_000;
+/**
+ * The main writer (deepseek-v4.1-flash:netra on Sumopod, reasoning off) takes 1-1.5 s, but the first turn of a
+ * lesson runs about 5.2 s; 7 s keeps that turn on the main writer instead of the slower backup.
+ */
+export const TUTOR_CALL_TIMEOUT_MS = 7_000;
+/** The backup writer (claude-haiku-5-5 on Sumopod, reasoning "low") answers in about 1.5 s. */
+export const TUTOR_BACKUP_TIMEOUT_MS = 8_000;
 /** The main checker (jev-1.13.0 on Sumopod) answers in about 1 s. */
 export const SAFETY_CALL_TIMEOUT_MS = 2_500;
 /** The backup checker (claude-haiku-5-5 on Sumopod) answers in under 2 s. */
@@ -150,7 +153,7 @@ export const openAiCompatibleModel =
     const doFetch = options.fetch ?? fetch;
     const response = await doFetch(provider.url, {
       method: "POST",
-      // Budget per turn, under the app's 23 s limit: tutor 5 s + backup 9 s + guard 2.5 s + backup 5 s.
+      // Budget per turn, under the app's 23 s limit: tutor 7 s + backup 8 s + guard 2.5 s + backup 5 s = 22.5 s.
       signal: AbortSignal.timeout(options.timeoutMs ?? TUTOR_CALL_TIMEOUT_MS),
       headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({

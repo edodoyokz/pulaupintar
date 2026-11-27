@@ -21,6 +21,8 @@
     // Backups when the main model errors, is slow or returns a cut-off reply.
     "TUTOR_FALLBACK_PROVIDER": "sumopod",
     "TUTOR_FALLBACK_MODEL": "claude-haiku-5-5",
+    // "none" still makes this model reason through Sumopod; "low" turns it off (1.4 s instead of 2.6-8.9 s).
+    "TUTOR_FALLBACK_REASONING_EFFORT": "low",
     "SAFETY_FALLBACK_PROVIDER": "sumopod",
     "SAFETY_FALLBACK_MODEL": "claude-haiku-5-5"
   },

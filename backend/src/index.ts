@@ -119,6 +119,7 @@ const tutorBackup = (env: Env): TutorModel | undefined => {
     provider,
     apiKey: apiKeyFor(env, provider),
     model: env.TUTOR_FALLBACK_MODEL,
+    reasoningEffort: env.TUTOR_FALLBACK_REASONING_EFFORT,
     timeoutMs: TUTOR_BACKUP_TIMEOUT_MS,
   });
 };

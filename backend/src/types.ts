@@ -18,6 +18,11 @@ export type Env = {
   /** Backup provider and model, used when the main one errors, times out or is cut off. */
   TUTOR_FALLBACK_PROVIDER?: LlmProvider;
   TUTOR_FALLBACK_MODEL?: string;
+  /**
+   * Optional reasoning_effort for the backup tutor. Sumopod's claude-haiku-5-5 still reasons on "none"
+   * (about 170 hidden tokens, 2.6 s) but not on "low" (0 tokens, 1.4 s).
+   */
+  TUTOR_FALLBACK_REASONING_EFFORT?: string;
   SAFETY_FALLBACK_PROVIDER?: LlmProvider;
   SAFETY_FALLBACK_MODEL?: string;
   GEMINI_API_KEY?: string;
