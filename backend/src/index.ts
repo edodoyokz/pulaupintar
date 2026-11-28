@@ -137,11 +137,17 @@ const tutorModelFor = (env: Env): TutorModel => {
 };
 
 /** A safety checker; Qwen3Guard and Jev models are called in their own formats. */
-const safetyChecker = (env: Env, provider: OpenAiCompatibleProvider, model: string | undefined, timeoutMs: number): TutorModel => {
+const safetyChecker = (
+  env: Env,
+  provider: OpenAiCompatibleProvider,
+  model: string | undefined,
+  timeoutMs: number,
+  reasoningEffort?: string,
+): TutorModel => {
   const apiKey = apiKeyFor(env, provider);
   if (model?.toLowerCase().includes("qwen3guard")) return qwenGuardModel({ provider, apiKey, model, timeoutMs });
   if (model?.toLowerCase().startsWith("jev-")) return jevGuardModel({ provider, apiKey, model, timeoutMs });
-  return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs });
+  return openAiCompatibleModel({ provider, apiKey, model, schema: SAFETY_OUTPUT_SCHEMA, timeoutMs, reasoningEffort });
 };
 
 /** Without a safety model nothing may be spoken from the tutor: the guard blocks every line, so children hear the prepared lines. */
@@ -155,7 +161,7 @@ export const safetyGuardFor = (env: Env): SafetyGuard => {
   const primary = safetyChecker(env, providerOrDefault(env, env.SAFETY_PROVIDER), env.SAFETY_MODEL, SAFETY_CALL_TIMEOUT_MS);
   const backupProvider = env.SAFETY_FALLBACK_PROVIDER;
   const backup = backupProvider
-    ? safetyChecker(env, backupProvider, env.SAFETY_FALLBACK_MODEL, SAFETY_BACKUP_TIMEOUT_MS)
+    ? safetyChecker(env, backupProvider, env.SAFETY_FALLBACK_MODEL, SAFETY_BACKUP_TIMEOUT_MS, env.SAFETY_FALLBACK_REASONING_EFFORT)
     : undefined;
   return safetyGuard(withFallback(primary, backup, isSafetyReply));
 };

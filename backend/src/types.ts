@@ -25,6 +25,8 @@ export type Env = {
   TUTOR_FALLBACK_REASONING_EFFORT?: string;
   SAFETY_FALLBACK_PROVIDER?: LlmProvider;
   SAFETY_FALLBACK_MODEL?: string;
+  /** Optional reasoning_effort for the backup checker; "low" for the same reason as TUTOR_FALLBACK_REASONING_EFFORT. */
+  SAFETY_FALLBACK_REASONING_EFFORT?: string;
   GEMINI_API_KEY?: string;
   /** Who voices and hears Kak Pinta: "google" (Cloud TTS and STT, default) or "gemini" (Gemini Live voice and Gemini transcription). */
   SPEECH_PROVIDER?: "google" | "gemini";

@@ -24,7 +24,8 @@
     // "none" still makes this model reason through Sumopod; "low" turns it off (1.4 s instead of 2.6-8.9 s).
     "TUTOR_FALLBACK_REASONING_EFFORT": "low",
     "SAFETY_FALLBACK_PROVIDER": "sumopod",
-    "SAFETY_FALLBACK_MODEL": "claude-haiku-5-5"
+    "SAFETY_FALLBACK_MODEL": "claude-haiku-5-5",
+    "SAFETY_FALLBACK_REASONING_EFFORT": "low"
   },
   // Per-IP limits per minute (Workers Rate Limiting). One child does about 3 turns a minute; a school class
   // shares one IP, so the limits leave room for about 40 children while still stopping a single abuser.
